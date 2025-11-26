@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useAppDispatch, useAppSelector } from '@/store/store';
-import { setUsers, updateUser } from '@/store/slices/usersSlice';
-import type { User } from '@/store/slices/usersSlice';
+import { useUsersStore } from '@/stores/users/useUsersStore';
+import type { User } from '@/stores/types';
 
 export const useUsersData = () => {
-  const dispatch = useAppDispatch();
-  const { users, filter, loading } = useAppSelector(state => state.users);
+  const { users, setUsers, updateUser, loading, setLoading } = useUsersStore();
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -76,10 +74,10 @@ export const useUsersData = () => {
           isClient: false
         },
       ];
-      dispatch(setUsers(mockUsers));
+      setUsers(mockUsers);
     }, 500);
     return () => clearTimeout(timer);
-  }, [dispatch]);
+  }, [setUsers]);
 
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
@@ -103,9 +101,9 @@ export const useUsersData = () => {
     };
   }, [users]);
 
-  const handleUserUpdate = (updatedUser: User) => dispatch(updateUser(updatedUser));
+  const handleUserUpdate = (updatedUser: User) => updateUser(updatedUser);
 
-  return { users, filter, loading, searchTerm, setSearchTerm, filteredUsers, stats, handleUserUpdate };
+  return { users, loading, searchTerm, setSearchTerm, filteredUsers, stats, handleUserUpdate };
 };
 
 export default useUsersData;

@@ -1,125 +1,150 @@
-import { Provider } from 'react-redux';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools/production";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, unstable_HistoryRouter as HistoryRouter } from "react-router-dom";
-import { createBrowserHistory } from 'history';
-import { store } from "./store/store";
 import { DashboardLayout } from "./components/layout/DashboardLayout";
 import { FullPageLoader } from "./components/ui/loading-spinner";
-import Login from "./pages/Login";
-import ProtectedRoute from "./components/auth/ProtectedRoute";
+import AdminProtectedRoute from "./components/auth/AdminProtectedRoute";
 import Dashboard from "./pages/Dashboard";
-import Users from "./pages/Users";
 import Clients from "./pages/Clients";
+import Subscribers from "./pages/Subscribers";
 import Plans from "./pages/Plans";
-import Support from "./pages/Support";
 import Invoices from "./pages/Invoices";
-import Portfolio from "./pages/Portfolio";
-import Reviews from "./pages/Reviews";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import Unauthorized from "./pages/Unauthorized";
 import ClientProfile from "./pages/ClientProfile";
+import Services from "./pages/Services";
+import Login from "./pages/Login";
+import { useAuthInit } from "./hooks/useAuthInit";
 
-const queryClient = new QueryClient();
-
-// Create a custom history object
-const history = createBrowserHistory();
-
-const routerConfig = {
-  future: {
-    v7_startTransition: true,
-    v7_relativeSplatPath: true,
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
   },
+});
+
+// Simple layout wrapper for dashboard routes
+const DashboardWrapper = () => (
+  <DashboardLayout>
+    <Outlet />
+  </DashboardLayout>
+);
+
+const AppRoutes = () => {
+  return (
+    <Routes>
+      {/* Public routes */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/unauthorized" element={<Unauthorized />} />
+
+      {/* Redirect root to dashboard */}
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+      {/* Protected admin routes */}
+      <Route
+        element={
+          <AdminProtectedRoute>
+            <DashboardWrapper />
+          </AdminProtectedRoute>
+        }
+      >
+        <Route path="/dashboard" element={<Dashboard />} />
+
+        {/* Client routes */}
+        <Route path="/dashboard/clients">
+          <Route index element={<Clients />} />
+          <Route path="new" element={<ClientProfile />} />
+          <Route path=":id" element={<ClientProfile />} />
+        </Route>
+
+        {/* Subscriber routes */}
+        <Route path="/dashboard/subscribers">
+          <Route index element={<Subscribers />} />
+          <Route path=":id" element={<ClientProfile />} />
+        </Route>
+
+        <Route path="/dashboard/plans" element={<Plans />} />
+        <Route path="/dashboard/invoices" element={<Invoices />} />
+        <Route path="/dashboard/settings" element={<Settings />} />
+        <Route path="/dashboard/services" element={<Services />} />
+
+        {/* Legacy routes - redirect to new dashboard paths */}
+        <Route
+          path="/clients/:id"
+          element={
+            <Navigate
+              to="/dashboard/clients/:id"
+              replace
+              state={{ from: window.location.pathname }}
+            />
+          }
+        />
+        <Route
+          path="/subscribers"
+          element={<Navigate to="/dashboard/subscribers" replace />}
+        />
+
+        {/* Additional legacy routes that should use the dashboard layout */}
+        <Route path="/plans" element={<Plans />} />
+        <Route path="/services" element={<Services />} />
+        <Route path="/invoices" element={<Invoices />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
+
+      {/* Redirect any unknown routes to dashboard */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  );
 };
 
-const App = () => (
-  <Provider store={store}>
+function App() {
+  const { isReady } = useAuthInit();
+
+  console.log("=== APP RENDER ===");
+  console.log("App render: isReady =", isReady);
+
+  // Show loader while auth is initializing
+  if (!isReady) {
+    console.log("--- APP: SHOWING LOADER ---");
+    console.log("App: Showing FullPageLoader because !isReady");
+    return <FullPageLoader />;
+  }
+
+  console.log("--- APP: RENDERING ROUTES ---");
+  console.log("App: Rendering app routes");
+  return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter {...routerConfig}>
-          <Routes>
-            <Route path="/" element={<Login />} />
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Dashboard />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/users" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Users />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/clients" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Clients />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/clients/:clientId" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <ClientProfile />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/plans" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Plans />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/support" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Support />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/invoices" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Invoices />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/portfolio" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Portfolio />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/reviews" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Reviews />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/settings" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Settings />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
+        <ErrorBoundary>
+          <TooltipProvider>
+            <AppRoutes />
+            <Toaster />
+            <Sonner position="top-right" />
+            <ReactQueryDevtools initialIsOpen={false} />
+          </TooltipProvider>
+        </ErrorBoundary>
+      </BrowserRouter>
     </QueryClientProvider>
-  </Provider>
-);
+  );
+}
 
 export default App;

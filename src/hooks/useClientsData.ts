@@ -1,85 +1,93 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useAppDispatch, useAppSelector } from '@/store/store';
-import { setUsers, updateUser } from '@/store/slices/usersSlice';
-import type { User } from '@/store/slices/usersSlice';
+import { useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { clientsService } from '@/services/api/clientsService';
+import { toast } from '@/components/ui/use-toast';
+
+export interface Client {
+  _id: string;
+  fname: string;
+  lname: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  status: 'active' | 'inactive' | 'suspended';
+  createdAt: string;
+  updatedAt: string;
+  // Add any additional client properties as needed
+}
 
 export const useClientsData = () => {
-  const dispatch = useAppDispatch();
-  const { users, clients } = useAppSelector(state => state.users);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'revenue' | 'date'>('name');
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const mockClients: User[] = [
-        {
-          id: '2',
-          email: 'mike@bistro.com',
-          name: 'Mike Johnson',
-          firstName: 'Mike',
-          lastName: 'Johnson',
-          phoneNumber: '+1987654321',
-          businessLocation: 'Los Angeles, CA',
-          status: 'active',
-          subscription: {
-            plan: 'Premium',
-            status: 'active',
-            expiresAt: '2024-12-15T00:00:00Z',
-            amount: 99
-          },
-          createdAt: '2023-11-10T09:15:00Z',
-          lastActive: '2024-01-20T16:45:00Z',
-          isClient: true
-        },
-        {
-          id: '5',
-          email: 'alex@italianbistro.com',
-          name: 'Alex Rodriguez',
-          firstName: 'Alex',
-          lastName: 'Rodriguez',
-          phoneNumber: '+1555888999',
-          businessLocation: 'Miami, FL',
-          status: 'active',
-          subscription: {
-            plan: 'Enterprise',
-            status: 'active',
-            expiresAt: '2024-11-20T00:00:00Z',
-            amount: 199
-          },
-          createdAt: '2023-10-05T14:20:00Z',
-          lastActive: '2024-01-19T11:30:00Z',
-          isClient: true
-        }
-      ];
-      const existingIds = new Set(users.map(u => u.id));
-      const newClients = mockClients.filter(c => !existingIds.has(c.id));
-      if (newClients.length > 0) {
-        dispatch(setUsers([...users, ...newClients]));
+  // Fetch clients using React Query
+  const { data: clientsData, isLoading, error } = useQuery({
+    queryKey: ['clients'],
+    queryFn: () => clientsService.getClients(),
+  });
+
+  // Normalize clients data to always be an array
+  const clients = useMemo(() => {
+    if (!clientsData) return [];
+    // Handle the response format from clientsService: { status: 'success', data: { clients: [...] } }
+    if (clientsData && typeof clientsData === 'object' && 'data' in clientsData) {
+      const responseData = clientsData.data as any;
+      if (responseData && 'clients' in responseData) {
+        return Array.isArray(responseData.clients) ? responseData.clients : [];
       }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [dispatch, users]);
+    }
+    return Array.isArray(clientsData) ? clientsData : [];
+  }, [clientsData]);
+
+  // Update client mutation
+  const updateClientMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Client> }) =>
+      clientsService.updateClient(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      toast({
+        title: 'Success',
+        description: 'Client updated successfully',
+      });
+    },
+    onError: (error) => {
+      console.error('Error updating client:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update client. Please try again.',
+        variant: 'destructive',
+      });
+    },
+  });
 
   const filteredClients = useMemo(() => {
-    // Ensure we only work with clients (isClient: true)
-    const clientList = clients.filter(c => c.isClient === true);
+    if (!Array.isArray(clients)) return [];
     
-    return clientList
+    return clients
       .filter(c => {
+        if (!c) return false;
+        if (!searchTerm) return true;
+        
         const searchLower = searchTerm.toLowerCase();
+        const fullName = `${c.fname || ''} ${c.lname || ''}`.toLowerCase();
+        
         return (
-          c.name.toLowerCase().includes(searchLower) || 
-          c.email.toLowerCase().includes(searchLower) ||
-          (c.phoneNumber && c.phoneNumber.includes(searchTerm)) ||
-          (c.businessLocation && c.businessLocation.toLowerCase().includes(searchLower))
+          fullName.includes(searchLower) || 
+          (c.email && c.email.toLowerCase().includes(searchLower)) ||
+          (c.phone && c.phone.toString().toLowerCase().includes(searchLower)) ||
+          (c.company && c.company.toLowerCase().includes(searchLower))
         );
       })
       .sort((a, b) => {
+        if (!a || !b) return 0;
+        
         switch (sortBy) {
           case 'name':
-            return a.name.localeCompare(b.name);
+            return `${a.fname || ''} ${a.lname || ''}`.localeCompare(`${b.fname || ''} ${b.lname || ''}`);
           case 'revenue':
-            return (b.subscription?.amount || 0) - (a.subscription?.amount || 0);
+            // Fallback to 0 if revenue data is not available
+            return 0;
           case 'date':
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
           default:
@@ -89,19 +97,128 @@ export const useClientsData = () => {
   }, [clients, searchTerm, sortBy]);
 
   const totalRevenue = useMemo(() => 
-    clients
-      .filter(c => c.isClient === true)
-      .reduce((sum, c) => sum + (c.subscription?.amount || 0), 0), 
+    Array.isArray(clients) 
+      ? clients.reduce((sum, c) => sum + (c.status === 'active' ? 1 : 0), 0)
+      : 0, 
     [clients]
   );
 
   const avgClientValue = useMemo(() => {
-    const activeClients = clients.filter(c => c.isClient === true);
-    return activeClients.length > 0 ? totalRevenue / activeClients.length : 0;
+    if (!Array.isArray(clients) || clients.length === 0) return 0;
+    return totalRevenue / clients.length;
   }, [totalRevenue, clients]);
-  const handleClientUpdate = (updated: User) => dispatch(updateUser(updated));
+  const handleClientUpdate = (updatedClient: Client) => {
+    console.log('Client updated:', updatedClient);
+  };
 
-  return { clients, searchTerm, setSearchTerm, sortBy, setSortBy, filteredClients, totalRevenue, avgClientValue, handleClientUpdate };
+  // Additional states and handlers for Clients.tsx compatibility
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [isLoadingPendingUsers, setIsLoadingPendingUsers] = useState(false);
+
+  const isError = !!error;
+  
+  const handleSearch = (value: string) => {
+    setSearchTerm(value);
+  };
+
+  const handleSortChange = (value: 'name' | 'revenue' | 'date') => {
+    setSortBy(value);
+  };
+
+  const handleDeleteClient = async (clientId: string) => {
+    setIsDeleting(true);
+    try {
+      await clientsService.deleteClient(clientId);
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      setErrorMessage('Failed to delete client');
+      setShowError(true);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      // Export logic here
+      console.log('Exporting clients...');
+    } catch (error) {
+      console.error('Error exporting clients:', error);
+      setErrorMessage('Failed to export clients');
+      setShowError(true);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleRetry = () => {
+    setShowError(false);
+    setErrorMessage('');
+    queryClient.invalidateQueries({ queryKey: ['clients'] });
+  };
+
+  const refetchClients = () => {
+    queryClient.invalidateQueries({ queryKey: ['clients'] });
+  };
+
+  const onApproveUser = async (userId: string) => {
+    try {
+      // Approve user logic here
+      console.log('Approving user:', userId);
+    } catch (error) {
+      console.error('Error approving user:', error);
+    }
+  };
+
+  const onRejectUser = async (userId: string) => {
+    try {
+      // Reject user logic here
+      console.log('Rejecting user:', userId);
+    } catch (error) {
+      console.error('Error rejecting user:', error);
+    }
+  };
+
+  return { 
+    // Original properties
+    clients, 
+    searchTerm, 
+    setSearchTerm, 
+    sortBy, 
+    setSortBy, 
+    filteredClients, 
+    totalRevenue, 
+    avgClientValue,
+    handleClientUpdate,
+    updateClientMutation,
+    
+    // Additional properties for Clients.tsx compatibility
+    isLoading,
+    isError,
+    isDeleting,
+    isExporting,
+    showError,
+    errorMessage,
+    pendingUsers,
+    isLoadingPendingUsers,
+    
+    // Handlers
+    handleSearch,
+    handleSortChange,
+    handleDeleteClient,
+    handleExport,
+    handleRetry,
+    refetchClients,
+    onApproveUser,
+    onRejectUser,
+    onClientUpdate: handleClientUpdate,
+  };
 };
 
 export default useClientsData;

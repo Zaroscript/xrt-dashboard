@@ -34,22 +34,33 @@ export const ActivityItem: React.FC<{ activity: ActivityItemType; index: number 
   </motion.div>
 );
 
-export const RecentActivityCard: React.FC<{ activities: ActivityItemType[] }> = ({ activities }) => (
-  <Card className="glass-card">
-    <CardHeader>
-      <CardTitle className="flex items-center space-x-2">
-        <Activity className="w-5 h-5 text-primary" />
-        <span>Recent Activity</span>
-      </CardTitle>
-      <CardDescription>Latest activities across your platform</CardDescription>
-    </CardHeader>
-    <CardContent className="space-y-1">
-      {activities.map((activity, index) => (
-        <ActivityItem key={activity.id} activity={activity} index={index} />
-      ))}
-    </CardContent>
-  </Card>
-);
+export const RecentActivityCard: React.FC<{ activities: ActivityItemType[] | undefined | null }> = ({ activities }) => {
+  // Ensure activities is an array before mapping
+  const safeActivities = Array.isArray(activities) ? activities : [];
+  
+  return (
+    <Card className="glass-card">
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <Activity className="w-5 h-5 text-primary" />
+          <span>Recent Activity</span>
+        </CardTitle>
+        <CardDescription>Latest activities across your platform</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-1">
+        {safeActivities.length > 0 ? (
+          safeActivities.map((activity, index) => (
+            <ActivityItem key={activity.id || index} activity={activity} index={index} />
+          ))
+        ) : (
+          <div className="text-center py-4 text-muted-foreground text-sm">
+            No recent activities found
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 export default RecentActivityCard;
 

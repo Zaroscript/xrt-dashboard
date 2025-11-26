@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Invoice } from "@/store/slices/supportSlice";
+import { Invoice } from "@/stores/support/types";
 import { DollarSign, Download as DownloadIcon } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import html2canvas from 'html2canvas';
@@ -235,7 +235,7 @@ const ViewInvoice = ({ invoice, isOpen, onClose }: ViewInvoiceProps) => {
                 {invoice.taxAmount !== undefined && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
-                      Tax ({invoice.taxRate || 0}%)
+                      Tax
                     </span>
                     <span>${invoice.taxAmount.toFixed(2)}</span>
                   </div>

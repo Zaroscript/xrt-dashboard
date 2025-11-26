@@ -19,6 +19,9 @@ import { useAppDispatch } from '@/store/store';
 import { updateUser } from '@/store/slices/usersSlice';
 import { useToast } from '@/components/ui/use-toast';
 import { X, Plus, Trash2, Globe } from 'lucide-react';
+import { AvatarUpload } from '@/components/ui/AvatarUpload';
+import { uploadMyAvatar, deleteMyAvatar } from '@/services/api/avatarApi';
+import { useState } from 'react';
 
 const formSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters').max(50),
@@ -41,6 +44,7 @@ interface EditProfileProps {
 export const EditProfile = ({ user, onSuccess, onCancel }: EditProfileProps) => {
   const dispatch = useAppDispatch();
   const { toast } = useToast();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatar || null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -63,6 +67,59 @@ export const EditProfile = ({ user, onSuccess, onCancel }: EditProfileProps) => 
   });
 
   const hasOldWebsite = form.watch('hasOldWebsite');
+  const firstName = form.watch('firstName');
+
+  const handleAvatarUpload = async (file: File) => {
+    try {
+      const newAvatarUrl = await uploadMyAvatar(file);
+      setAvatarUrl(newAvatarUrl);
+      
+      // Update user in store immediately to reflect change
+      dispatch(updateUser({
+        ...user,
+        avatar: newAvatarUrl
+      }));
+
+      toast({
+        title: 'Avatar updated',
+        description: 'Your profile picture has been updated successfully.',
+      });
+    } catch (error) {
+      console.error('Avatar upload failed:', error);
+      toast({
+        title: 'Upload failed',
+        description: 'Failed to upload avatar. Please try again.',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
+
+  const handleAvatarDelete = async () => {
+    try {
+      await deleteMyAvatar();
+      setAvatarUrl(null);
+      
+      // Update user in store
+      dispatch(updateUser({
+        ...user,
+        avatar: undefined
+      }));
+
+      toast({
+        title: 'Avatar removed',
+        description: 'Your profile picture has been removed.',
+      });
+    } catch (error) {
+      console.error('Avatar delete failed:', error);
+      toast({
+        title: 'Delete failed',
+        description: 'Failed to remove avatar. Please try again.',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     // Filter out empty website URLs
@@ -79,6 +136,7 @@ export const EditProfile = ({ user, onSuccess, onCancel }: EditProfileProps) => 
       phoneNumber: values.phoneNumber,
       businessLocation: values.businessLocation,
       websites: websites.length > 0 ? websites : undefined,
+      avatar: avatarUrl || undefined,
     };
 
     dispatch(updateUser(updatedUser));
@@ -117,6 +175,15 @@ export const EditProfile = ({ user, onSuccess, onCancel }: EditProfileProps) => 
             >
               <X className="h-5 w-5" />
             </Button>
+          </div>
+
+          <div className="flex justify-center mb-6">
+            <AvatarUpload
+              currentAvatar={avatarUrl}
+              initials={firstName || user.firstName || '?'}
+              onUpload={handleAvatarUpload}
+              onDelete={handleAvatarDelete}
+            />
           </div>
 
           <Form {...form}>

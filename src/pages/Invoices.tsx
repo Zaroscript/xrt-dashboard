@@ -1,35 +1,7 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import {
-  FileText,
-  Plus,
-  DollarSign,
-  Calendar,
-  Send,
-  Eye,
-  Edit as EditIcon,
-  Download,
-  Filter,
-  Search,
-  MoreHorizontal,
-} from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -37,368 +9,485 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAppSelector, useAppDispatch } from "@/store/store";
-import { setInvoices, updateInvoice } from "@/store/slices/supportSlice";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+  Calendar,
+  Download,
+  DollarSign,
+  Calendar as CalendarIcon,
+  Printer,
+  Send,
+  MoreHorizontal,
+  ArrowUpDown,
+  Eye,
+  FileText,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { format } from "date-fns";
+import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  getInvoices,
+  createInvoice,
+  updateInvoice as updateInvoiceApi,
+} from "@/services/invoiceService";
+import {
+  Invoice,
+  InvoiceStatus,
+  InvoiceItem,
+  InvoiceClient,
+  InvoiceUser,
+} from "@/types/invoice.types";
+import { InvoiceForm } from "@/components/invoices/InvoiceForm";
 import ViewInvoice from "@/components/invoices/ViewInvoice";
-import EditInvoice from "@/components/invoices/EditInvoice";
 
-// Import Invoice type from supportSlice
-import type { Invoice } from "@/store/slices/supportSlice";
+// ViewInvoice is imported from @/components/invoices/ViewInvoice
 
+// Mock data for status colors - replace with your theme colors if needed
+const statusColors = {
+  draft: "bg-gray-100 text-gray-800",
+  sent: "bg-blue-100 text-blue-800",
+  paid: "bg-green-100 text-green-800",
+  overdue: "bg-red-100 text-red-800",
+  cancelled: "bg-gray-200 text-gray-800",
+};
 
+// Extend the Invoice type to include the id field for backward compatibility
+type ExtendedInvoice = Omit<Invoice, "status" | "id"> & {
+  _id?: string;
+  id?: string;
+  status: "draft" | "sent" | "paid" | "overdue" | "cancelled";
+  client: string | { _id: string; companyName: string };
+  user: string | { _id: string; fName: string; lName: string };
+  items: Array<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    taxRate?: number;
+    amount?: number;
+  }>;
+};
 
+// Helper to get client name
+const getClientName = (client: string | InvoiceClient) => {
+  if (!client) return "Unknown Client";
+  return typeof client === "string"
+    ? client
+    : client.companyName || "Unknown Client";
+};
 
+// Helper to format currency
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(amount);
+};
 
-interface InvoiceCardProps {
-  invoice: Invoice;
-  onUpdate: (invoice: Invoice) => void;
-  onView: (invoice: Invoice) => void;
-  onEdit: (invoice: Invoice) => void;
-}
-
-const InvoiceCard: React.FC<InvoiceCardProps> = ({
-  invoice,
-  onUpdate,
-  onView,
-  onEdit,
-}) => {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "draft":
-        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
-      case "sent":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
-      case "paid":
-        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
-      case "overdue":
-        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
-      default:
-        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
-    }
+// Helper to map API invoice data to form values
+const mapApiInvoiceToForm = (invoice: ExtendedInvoice): InvoiceFormValues => {
+  return {
+    client:
+      typeof invoice.client === "string"
+        ? invoice.client
+        : invoice.client?._id || "",
+    user:
+      typeof invoice.user === "string" ? invoice.user : invoice.user?._id || "",
+    status: invoice.status || "draft",
+    issueDate: new Date(invoice.issueDate),
+    dueDate: new Date(invoice.dueDate),
+    items:
+      invoice.items?.map((item) => ({
+        description: item.description || "",
+        quantity: item.quantity || 0,
+        unitPrice: item.unitPrice || 0,
+        taxRate: item.taxRate,
+        amount: item.amount,
+      })) || [],
+    notes: invoice.notes,
+    terms: invoice.terms,
+    subtotal: invoice.subtotal,
+    tax: invoice.tax,
+    total: invoice.total,
   };
+};
 
-  const handleStatusChange = (newStatus: Invoice["status"]) => {
-    onUpdate({
-      ...invoice,
-      status: newStatus,
-      ...(newStatus === "paid" && { paidAt: new Date().toISOString() }),
-    });
-  };
-
-  const getDaysUntilDue = () => {
-    const dueDate = new Date(invoice.dueDate);
-    const today = new Date();
-    const diffTime = dueDate.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
-  const daysUntilDue = getDaysUntilDue();
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.02, y: -2 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-    >
-      <Card className="glass-card-hover overflow-hidden relative">
-        <div
-          className={`absolute top-0 left-0 w-full h-1 ${
-            invoice.status === "paid"
-              ? "bg-gradient-to-r from-green-500 to-green-600"
-              : invoice.status === "overdue"
-              ? "bg-gradient-to-r from-red-500 to-red-600"
-              : "bg-gradient-to-r from-blue-500 to-blue-600"
-          }`}
-        />
-
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center space-x-4">
-              <Avatar className="h-12 w-12">
-                <AvatarImage
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${invoice.userEmail}`}
-                />
-                <AvatarFallback>
-                  {invoice.userName
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-
-              <div className="space-y-1">
-                <h3 className="font-bold text-lg text-foreground">
-                  Invoice #{invoice.id}
-                </h3>
-                <p className="text-foreground font-medium">
-                  {invoice.userName}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {invoice.userEmail}
-                </p>
-                <div className="flex items-center space-x-2">
-                  <Badge className={getStatusColor(invoice.status)}>
-                    {invoice.status.charAt(0).toUpperCase() +
-                      invoice.status.slice(1)}
-                  </Badge>
-                  {invoice.status === "sent" && daysUntilDue < 0 && (
-                    <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">
-                      {Math.abs(daysUntilDue)} days overdue
-                    </Badge>
-                  )}
-                  {invoice.status === "sent" && daysUntilDue > 0 && (
-                    <Badge variant="outline">Due in {daysUntilDue} days</Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm">
-                  <MoreHorizontal className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="glass-card">
-                <DropdownMenuItem onClick={() => onView(invoice)}>
-                  <Eye className="w-4 h-4 mr-2" />
-                  View Invoice
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onEdit(invoice)}>
-                  <EditIcon className="w-4 h-4 mr-2" />
-                  Edit Invoice
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Download className="w-4 h-4 mr-2" />
-                  Download PDF
-                </DropdownMenuItem>
-                {invoice.status === "draft" && (
-                  <DropdownMenuItem onClick={() => handleStatusChange("sent")}>
-                    <Send className="w-4 h-4 mr-2" />
-                    Send Invoice
-                  </DropdownMenuItem>
-                )}
-                {invoice.status === "sent" && (
-                  <DropdownMenuItem onClick={() => handleStatusChange("paid")}>
-                    <DollarSign className="w-4 h-4 mr-2" />
-                    Mark as Paid
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex justify-between items-center p-3 bg-muted/20 rounded-lg">
-              <span className="text-sm text-muted-foreground">Amount</span>
-              <span className="text-2xl font-bold text-primary">
-                ${invoice.amount.toLocaleString()}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Created:</span>
-                <span className="ml-2 text-foreground">
-                  {new Date(invoice.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Due Date:</span>
-                <span className="ml-2 text-foreground">
-                  {new Date(invoice.dueDate).toLocaleDateString()}
-                </span>
-              </div>
-            </div>
-
-            {invoice.paidAt && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">Paid on:</span>
-                <span className="ml-2 text-success font-medium">
-                  {new Date(invoice.paidAt).toLocaleDateString()}
-                </span>
-              </div>
-            )}
-
-            <div className="border-t pt-3">
-              <h4 className="font-medium text-foreground mb-2">Description</h4>
-              <p className="text-sm text-muted-foreground">
-                {invoice.description}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
+type InvoiceFormValues = {
+  client: string;
+  user: string;
+  status: "draft" | "sent" | "paid" | "overdue" | "cancelled";
+  issueDate: Date;
+  dueDate: Date;
+  items: Array<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    taxRate?: number;
+    amount?: number;
+  }>;
+  notes?: string;
+  terms?: string;
+  subtotal?: number;
+  tax?: number;
+  total?: number;
 };
 
 const Invoices = () => {
-  const dispatch = useAppDispatch();
-  const { invoices, loading } = useAppSelector((state) => state.support);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "all">(
+    "all"
+  );
+  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [sortConfig, setSortConfig] = useState<{
+    key: keyof Invoice;
+    direction: "asc" | "desc";
+  } | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
-  const [form, setForm] = useState<Partial<Invoice>>({
-    id: "",
-    userName: "",
-    userEmail: "",
-    amount: 0,
-    description: "",
-    status: "draft",
-    dueDate: "",
-    userId: "",
-  });
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sendInvoiceId, setSendInvoiceId] = useState<string | null>(null);
+  const [isSendDialogOpen, setIsSendDialogOpen] = useState(false);
 
+  // Handle modal state changes
+  const openEditModal = (invoice: Invoice | null = null) => {
+    setEditingInvoice(invoice);
+    setIsModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setEditingInvoice(null);
+    setIsModalOpen(false);
+  };
+
+  const openViewModal = (invoice: Invoice) => {
+    setViewingInvoice(invoice);
+  };
+
+  const closeViewModal = () => {
+    setViewingInvoice(null);
+  };
+
+  const downloadInvoicePdf = async (invoiceId: string) => {
+    try {
+      setIsDownloading(true);
+      const response = await fetch(`/api/invoices/${invoiceId}/download`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+
+      if (!response.ok) throw new Error("Failed to download invoice");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoice-${viewingInvoice?.invoiceNumber || "details"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+
+      toast.success("Invoice downloaded successfully");
+    } catch (err) {
+      console.error("Download error:", err);
+      toast.error("Failed to download invoice");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleSendClick = (invoiceId: string) => {
+    setSendInvoiceId(invoiceId);
+    setIsSendDialogOpen(true);
+  };
+
+  const handleConfirmSend = async () => {
+    if (!sendInvoiceId) return;
+
+    try {
+      setIsSending(true);
+      const response = await fetch(`/api/invoices/${sendInvoiceId}/send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+
+      if (!response.ok) throw new Error("Failed to send invoice");
+
+      const data = await response.json();
+      setViewingInvoice(data);
+      toast.success("Invoice sent successfully");
+
+      // Update local state to reflect sent status
+      setInvoices(
+        invoices.map((inv) =>
+          inv._id === sendInvoiceId || inv.id === sendInvoiceId
+            ? { ...inv, status: "sent" as InvoiceStatus }
+            : inv
+        )
+      );
+    } catch (err) {
+      console.error("Send error:", err);
+      toast.error("Failed to send invoice");
+    } finally {
+      setIsSending(false);
+      setIsSendDialogOpen(false);
+      setSendInvoiceId(null);
+    }
+  };
+
+  // Helper function to format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(amount);
+  };
+
+  // Helper function to get client name
+  const getClientName = (client: string | InvoiceClient) => {
+    return typeof client === "string"
+      ? client
+      : client?.companyName || "Unknown Client";
+  };
+
+  // Fetch invoices on component mount and when status filter changes
   useEffect(() => {
-    // Simulate loading invoices data
-    setTimeout(() => {
-      const mockInvoices: Invoice[] = [
-        {
-          id: "INV-001",
-          userId: "1",
-          userName: "Sarah Wilson",
-          userEmail: "sarah@restaurant.com",
-          amount: 2500,
-          description:
-            "Recipe website development and 3 months premium support",
-          status: "paid",
-          dueDate: "2024-01-15T00:00:00Z",
-          createdAt: "2023-12-15T10:30:00Z",
-          paidAt: "2024-01-10T14:20:00Z",
-        },
-        {
-          id: "INV-002",
-          userId: "2",
-          userName: "Mike Johnson",
-          userEmail: "mike@bistro.com",
-          amount: 1800,
-          description:
-            "Custom recipe sharing platform with inventory management",
-          status: "sent",
-          dueDate: "2024-02-01T00:00:00Z",
-          createdAt: "2024-01-15T09:15:00Z",
-        },
-        {
-          id: "INV-003",
-          userId: "3",
-          userName: "Emily Davis",
-          userEmail: "emily@foodblog.com",
-          amount: 950,
-          description:
-            "Monthly premium plan and additional design customizations",
-          status: "overdue",
-          dueDate: "2024-01-10T00:00:00Z",
-          createdAt: "2023-12-20T11:45:00Z",
-        },
-        {
-          id: "INV-004",
-          userId: "4",
-          userName: "Restaurant Chain LLC",
-          userEmail: "contact@restaurantchain.com",
-          amount: 5000,
-          description: "Enterprise recipe management system - Phase 1",
-          status: "draft",
-          dueDate: "2024-02-15T00:00:00Z",
-          createdAt: "2024-01-20T16:30:00Z",
-        },
-      ];
+    const fetchInvoices = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await getInvoices({
+          status: statusFilter !== "all" ? statusFilter : undefined,
+        });
+        setInvoices(data);
+      } catch (err) {
+        console.error("Error fetching invoices:", err);
+        setError("Failed to fetch invoices. Please try again.");
+        toast.error("Failed to fetch invoices");
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-      dispatch(setInvoices(mockInvoices));
-    }, 1000);
-  }, [dispatch]);
+    fetchInvoices();
+  }, [statusFilter]);
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await getInvoices({
+          status: statusFilter !== "all" ? statusFilter : undefined,
+        });
+        setInvoices(data);
+      } catch (err) {
+        console.error("Error fetching invoices:", err);
+        setError("Failed to fetch invoices. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInvoices();
+  }, [setInvoices, statusFilter]);
 
   const filteredInvoices = invoices.filter((invoice) => {
+    const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
-      invoice.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.id.toLowerCase().includes(searchTerm.toLowerCase());
+      (invoice.userName?.toLowerCase().includes(searchLower) ||
+        invoice.userEmail?.toLowerCase().includes(searchLower) ||
+        invoice.id?.toLowerCase().includes(searchLower)) ??
+      false;
     const matchesStatus =
       statusFilter === "all" || invoice.status === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
 
-  const handleInvoiceUpdate = (updatedInvoice: Invoice) => {
-    dispatch(updateInvoice(updatedInvoice));
+  const handleInvoiceUpdate = async (
+    invoiceId: string,
+    formData: InvoiceFormValues
+  ) => {
+    if (!invoiceId) {
+      toast.error("Invalid invoice ID");
+      return;
+    }
+    try {
+      setIsLoading(true);
+      // Calculate subtotal, tax, and total
+      const subtotal = formData.items.reduce((sum, item) => {
+        return sum + item.quantity * item.unitPrice;
+      }, 0);
+
+      const tax = formData.items.reduce((sum, item) => {
+        const itemTax =
+          (item.quantity * item.unitPrice * (item.taxRate || 0)) / 100;
+        return sum + itemTax;
+      }, 0);
+
+      const total = subtotal + tax;
+
+      const invoiceData = {
+        ...formData,
+        subtotal,
+        tax,
+        total,
+        // Convert dates to ISO string for the API
+        issueDate: formData.issueDate.toISOString(),
+        dueDate: formData.dueDate.toISOString(),
+        // Ensure client and user are sent as IDs
+        client: formData.client,
+        user: formData.user,
+      };
+
+      const updatedInvoice = await updateInvoiceApi(invoiceId, invoiceData);
+      setInvoices(
+        invoices.map((inv) =>
+          inv._id === invoiceId
+            ? { ...updatedInvoice, id: updatedInvoice._id }
+            : inv
+        )
+      );
+      toast.success("Invoice updated successfully");
+      setEditingInvoice(null);
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Error updating invoice:", error);
+      toast.error("Failed to update invoice");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const saveInvoice = () => {
-    if (!form.id || !form.userName || !form.userEmail) return;
-    
-    const invoiceToSave: Invoice = {
-      id: form.id,
-      userId: form.userId || '1', // Default user ID
-      userName: form.userName,
-      userEmail: form.userEmail,
-      amount: form.amount || 0,
-      description: form.description || '',
-      status: form.status as Invoice['status'] || 'draft',
-      dueDate: form.dueDate || new Date().toISOString(),
-      createdAt: form.createdAt || new Date().toISOString(),
-      paidAt: form.paidAt,
-    };
+  const handleCreateInvoice = async (data: InvoiceFormValues) => {
+    if (!data.client || !data.user) {
+      toast.error("Please select both client and user");
+      return;
+    }
+    try {
+      setIsLoading(true);
+      // Calculate subtotal, tax, and total
+      const subtotal = data.items.reduce((sum, item) => {
+        return sum + item.quantity * item.unitPrice;
+      }, 0);
 
-    dispatch(updateInvoice(invoiceToSave));
-    setModalOpen(false);
-    
-    // Reset form
-    setForm({
-      id: `INV-${String(invoices.length + 1).padStart(3, '0')}`,
-      userName: '',
-      userEmail: '',
-      amount: 0,
-      description: '',
-      status: 'draft',
-      dueDate: new Date().toISOString(),
-      userId: '',
-    });
+      const tax = data.items.reduce((sum, item) => {
+        const itemTax =
+          (item.quantity * item.unitPrice * (item.taxRate || 0)) / 100;
+        return sum + itemTax;
+      }, 0);
+
+      const total = subtotal + tax;
+
+      const newInvoice = await createInvoice({
+        ...data,
+        subtotal,
+        tax,
+        total,
+        // Convert dates to ISO string for the API
+        issueDate: data.issueDate.toISOString(),
+        dueDate: data.dueDate.toISOString(),
+        // Ensure client and user are sent as IDs
+        client: data.client,
+        user: data.user,
+        status: data.status || "draft",
+      });
+
+      setInvoices([{ ...newInvoice, id: newInvoice._id }, ...invoices]);
+      toast.success("Invoice created successfully");
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Error creating invoice:", error);
+      toast.error("Failed to create invoice");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async (formData: InvoiceFormValues) => {
+    try {
+      if (editingInvoice) {
+        await handleUpdateInvoice(formData);
+      } else {
+        await handleCreateInvoice(formData);
+      }
+    } catch (err) {
+      console.error("Error saving invoice:", err);
+      // You might want to show an error message to the user here
+    }
   };
 
   const openCreate = () => {
     setEditingInvoice(null);
-    setForm({
-      id: `INV-${String(invoices.length + 1).padStart(3, "0")}`,
-      userName: "",
-      userEmail: "",
-      amount: 0,
-      description: "",
-      status: "draft",
-      dueDate: new Date().toISOString(),
-      userId: "",
-      items: [
-        {
-          description: "",
-          quantity: 1,
-          unitPrice: 0,
-        },
-      ],
-      subtotal: 0,
-      taxAmount: 0,
-      discountAmount: 0,
-    });
-    setModalOpen(true);
+    setIsModalOpen(true);
   };
 
-  const openEdit = (invoice: Invoice) => {
+  const openEdit = (invoice: ExtendedInvoice) => {
     setEditingInvoice(invoice);
+    setIsModalOpen(true);
   };
 
-  const handleSaveInvoice = (updatedInvoice: Invoice) => {
-    dispatch(updateInvoice(updatedInvoice));
-    setEditingInvoice(null);
+  const handleSaveInvoice = async (updatedInvoice: ExtendedInvoice) => {
+    try {
+      await updateInvoiceApi(
+        updatedInvoice._id || updatedInvoice.id,
+        updatedInvoice
+      );
+      setInvoices(
+        invoices.map((inv) =>
+          inv.id === updatedInvoice.id || inv._id === updatedInvoice._id
+            ? updatedInvoice
+            : inv
+        )
+      );
+      setEditingInvoice(null);
+      toast.success("Invoice updated successfully");
+    } catch (error) {
+      console.error("Error updating invoice:", error);
+      toast.error("Failed to update invoice");
+    }
   };
 
   const exportCSV = () => {
@@ -479,12 +568,8 @@ const Invoices = () => {
             <Download className="w-4 h-4 mr-2" />
             Export All
           </Button>
-          <Button
-            className="bg-gold-gradient text-primary-foreground shadow-gold"
-            onClick={openCreate}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create Invoice
+          <Button onClick={openCreate} className="gap-2">
+            <Plus className="h-4 w-4" /> New Invoice
           </Button>
         </div>
       </motion.div>
@@ -526,7 +611,6 @@ const Invoices = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
-            whileHover={{ scale: 1.05 }}
           >
             <Card className="glass-card-hover overflow-hidden relative">
               <div
@@ -572,17 +656,22 @@ const Invoices = () => {
           />
         </div>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-48 glass-card">
-            <Filter className="w-4 h-4 mr-2" />
-            <SelectValue />
+        <Select
+          value={statusFilter}
+          onValueChange={(value: string) =>
+            setStatusFilter(value as InvoiceStatus | "all")
+          }
+        >
+          <SelectTrigger className="w-[180px] glass-card">
+            <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent className="glass-card">
-            <SelectItem value="all">All Invoices</SelectItem>
+            <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
             <SelectItem value="sent">Sent</SelectItem>
             <SelectItem value="paid">Paid</SelectItem>
             <SelectItem value="overdue">Overdue</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
       </motion.div>
@@ -596,165 +685,119 @@ const Invoices = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
           >
-            <InvoiceCard
-              invoice={invoice}
-              onUpdate={handleInvoiceUpdate}
-              onView={(inv) => setViewingInvoice(inv)}
-              onEdit={openEdit}
-            />
+            <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-medium">
+                    {invoice.invoiceNumber ||
+                      `INV-${invoice._id?.substring(0, 6).toUpperCase()}`}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {format(new Date(invoice.issueDate), "MMM dd, yyyy")}
+                  </p>
+                  <p className="text-sm font-medium mt-2">
+                    {formatCurrency(invoice.total || 0)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setViewingInvoice(invoice)}
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openEdit(invoice)}
+                  >
+                    <Pencil className="h-4 w-4 mr-1" />
+                    Edit
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-4">
+                <Badge className={`${statusColors[invoice.status]} capitalize`}>
+                  {invoice.status}
+                </Badge>
+              </div>
+            </div>
           </motion.div>
         ))}
 
-      {filteredInvoices.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center py-12"
-        >
-          <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-foreground mb-2">
-            No invoices found
-          </h3>
-          <p className="text-muted-foreground">
-            {searchTerm
-              ? "Try adjusting your search terms"
-              : "Create your first invoice to get started"}
-          </p>
-        </motion.div>
-      )}
-
-      {/* Edit Invoice Modal */}
-      <EditInvoice
-        invoice={editingInvoice}
-        isOpen={!!editingInvoice}
-        onSave={handleSaveInvoice}
-        onClose={() => setEditingInvoice(null)}
-      />
+        {filteredInvoices.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-12"
+          >
+            <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              No invoices found
+            </h3>
+            <p className="text-muted-foreground">
+              {searchTerm
+                ? "Try adjusting your search terms"
+                : "Create your first invoice to get started"}
+            </p>
+          </motion.div>
+        )}
+      </div>
 
       {/* Create Invoice Modal */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-xl glass-card">
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create New Invoice</DialogTitle>
-            <DialogDescription>Fill in the details and save</DialogDescription>
+            <DialogTitle>
+              {editingInvoice ? "Edit Invoice" : "Create New Invoice"}
+            </DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="inv-id">ID</Label>
-              <Input
-                id="inv-id"
-                value={form.id as string}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, id: e.target.value }))
-                }
-                className="glass-card"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="inv-amount">Amount</Label>
-              <Input
-                id="inv-amount"
-                type="number"
-                value={String(form.amount ?? 0)}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    amount: Number(e.target.value),
-                  }))
-                }
-                className="glass-card"
-              />
-            </div>
-            <div className="space-y-2 md:col-span-1">
-              <Label htmlFor="inv-name">Client Name</Label>
-              <Input
-                id="inv-name"
-                value={form.userName as string}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, userName: e.target.value }))
-                }
-                className="glass-card"
-              />
-            </div>
-            <div className="space-y-2 md:col-span-1">
-              <Label htmlFor="inv-email">Client Email</Label>
-              <Input
-                id="inv-email"
-                type="email"
-                value={form.userEmail as string}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, userEmail: e.target.value }))
-                }
-                className="glass-card"
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="inv-desc">Description</Label>
-              <Input
-                id="inv-desc"
-                value={form.description as string}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, description: e.target.value }))
-                }
-                className="glass-card"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="inv-due">Due Date</Label>
-              <Input
-                id="inv-due"
-                type="date"
-                value={(form.dueDate || "").slice(0, 10)}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, dueDate: e.target.value }))
-                }
-                className="glass-card"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="inv-status">Status</Label>
-              <Select
-                value={form.status as string}
-                onValueChange={(v) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    status: v as Invoice["status"],
-                  }))
-                }
-              >
-                <SelectTrigger id="inv-status" className="glass-card">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="glass-card">
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="sent">Sent</SelectItem>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="overdue">Overdue</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-gold-gradient text-primary-foreground"
-              onClick={saveInvoice}
-            >
-              Save
-            </Button>
-          </div>
+          <InvoiceForm
+            initialData={
+              editingInvoice ? mapApiInvoiceToForm(editingInvoice) : undefined
+            }
+            onSubmit={
+              editingInvoice
+                ? (formData) =>
+                    handleInvoiceUpdate(
+                      editingInvoice._id || editingInvoice.id || "",
+                      formData
+                    )
+                : handleCreateInvoice
+            }
+            onCancel={() => setIsModalOpen(false)}
+          />
         </DialogContent>
       </Dialog>
 
       {/* View Invoice Modal */}
-      <ViewInvoice
-        invoice={viewingInvoice}
-        isOpen={!!viewingInvoice}
-        onClose={() => setViewingInvoice(null)}
-      />
-    </div>
+      {viewingInvoice && (
+        <ViewInvoice
+          invoice={viewingInvoice}
+          isOpen={!!viewingInvoice}
+          onClose={() => setViewingInvoice(null)}
+        />
+      )}
+      {/* Send Confirmation Dialog */}
+      <AlertDialog open={isSendDialogOpen} onOpenChange={setIsSendDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send Invoice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will send the invoice to the client via email. This action
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmSend} disabled={isSending}>
+              {isSending ? "Sending..." : "Send Invoice"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

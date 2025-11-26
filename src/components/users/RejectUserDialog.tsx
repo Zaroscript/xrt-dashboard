@@ -1,50 +1,37 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { X, AlertTriangle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { useAppDispatch } from '@/store/store';
-import { updateUser } from '@/store/slices/usersSlice';
-import type { User } from '@/store/slices/usersSlice';
+import { useState } from "react";
+import { X, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface RejectUserDialogProps {
-  user: User;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess?: () => void;
+  onConfirm: (reason: string) => void;
+  userName: string;
+  isProcessing?: boolean;
 }
 
 export const RejectUserDialog = ({
-  user,
   open,
   onOpenChange,
-  onSuccess,
+  onConfirm,
+  userName,
+  isProcessing = false,
 }: RejectUserDialogProps) => {
-  const dispatch = useAppDispatch();
-  const [reason, setReason] = useState(user.rejectionReason || '');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reason, setReason] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason.trim()) return;
-
-    setIsSubmitting(true);
-    try {
-      const result = dispatch(updateUser({
-        ...user,
-        status: 'rejected',
-        rejectionReason: reason.trim(),
-      }));
-      
-      // If the update is successful, the parent component will handle the state update
-      onSuccess?.();
-      onOpenChange(false);
-    } catch (error) {
-      console.error('Failed to reject user:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    onConfirm(reason.trim());
   };
 
   return (
@@ -56,10 +43,12 @@ export const RejectUserDialog = ({
             Reject User
           </DialogTitle>
           <DialogDescription>
-            Please provide a reason for rejecting this user. This will be visible to them.
+            Are you sure you want to reject <strong>{userName}</strong>? Please
+            provide a reason for rejection. This will be sent to the user via
+            email.
           </DialogDescription>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Textarea
@@ -72,23 +61,23 @@ export const RejectUserDialog = ({
               className="min-h-[100px]"
             />
           </div>
-          
+
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
+              disabled={isProcessing}
             >
               Cancel
             </Button>
             <Button
               type="submit"
               variant="destructive"
-              disabled={!reason.trim() || isSubmitting}
+              disabled={!reason.trim() || isProcessing}
               className="gap-2"
             >
-              {isSubmitting ? 'Saving...' : 'Reject User'}
+              {isProcessing ? "Rejecting..." : "Reject User"}
             </Button>
           </DialogFooter>
         </form>

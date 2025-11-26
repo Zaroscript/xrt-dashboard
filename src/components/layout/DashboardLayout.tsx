@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useAppSelector, useAppDispatch } from '@/store/store';
-import { toggleTheme } from '@/store/slices/dashboardSlice';
+import { useTheme } from 'next-themes';
+import useSettingsStore from '@/stores/settings/useSettingsStore';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
-import { ThemeProvider } from 'next-themes';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface DashboardLayoutProps {
@@ -13,30 +12,28 @@ interface DashboardLayoutProps {
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const dispatch = useAppDispatch();
-  const theme = useAppSelector(state => state.dashboard.theme);
+  const { theme, setTheme } = useTheme();
   const isMobile = useIsMobile();
 
   // Force collapsed state on mobile
   const effectiveCollapsed = isMobile || sidebarCollapsed;
 
   const handleThemeToggle = () => {
-    dispatch(toggleTheme());
+    setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
   return (
-    <ThemeProvider attribute="class" defaultTheme={theme} forcedTheme={theme}>
-      <div className={`min-h-screen bg-background ${theme}`}>
+      <div className="min-h-screen bg-background">
         <div className="flex h-screen overflow-hidden">
           <motion.div
             initial={{ x: -280 }}
             animate={{ x: 0 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className={`${effectiveCollapsed ? 'w-20' : 'w-72'} transition-all duration-300 flex-shrink-0`}
+            className={`${effectiveCollapsed ? 'w-20' : 'w-72'} transition-all duration-300 flex-shrink-0 flex flex-col border-r border-border h-full`}
           >
             <Sidebar 
               collapsed={effectiveCollapsed} 
-              onToggle={() => !isMobile && setSidebarCollapsed(!sidebarCollapsed)} 
+              onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
             />
           </motion.div>
           
@@ -45,7 +42,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
               onThemeToggle={handleThemeToggle} 
               theme={theme}
               sidebarCollapsed={effectiveCollapsed}
-              onSidebarToggle={() => !isMobile && setSidebarCollapsed(!sidebarCollapsed)}
+              onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
             />
             
             <main className="flex-1 overflow-y-auto bg-background p-6 relative">
@@ -61,6 +58,5 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
           </div>
         </div>
       </div>
-    </ThemeProvider>
   );
 };

@@ -1,25 +1,94 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAppSelector } from '@/store/store';
+import { useEffect, useMemo, useCallback, useState } from 'react';
+import { FullPageLoader } from '../ui/loading-spinner';
+import { useAuthStore } from '../../stores/auth/useAuthStore';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  roles?: string[];
+  requiredPermissions?: string[];
 }
 
-const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const isAuthenticated = useAppSelector(state => state.auth.isAuthenticated);
-  const role = useAppSelector(state => state.auth.user?.role);
+const ProtectedRoute = ({ 
+  children, 
+  roles = ['super_admin', 'admin', 'moderator'],
+  requiredPermissions = []
+}: ProtectedRouteProps) => {
   const location = useLocation();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  
+  // Get auth state from Zustand store including rehydration status
+  const { isAuthenticated, loading: isLoading, user, _hasHydrated } = useAuthStore();
 
-  if (!isAuthenticated) {
-    return <Navigate to="/" state={{ from: location }} replace />;
-  }
+  // Check if user has required role
+  const hasRequiredRole = useMemo(() => {
+    if (!user?.role) return false;
+    return roles.length === 0 || roles.includes(user.role);
+  }, [user?.role, roles]);
 
-  if (role !== 'admin' && role !== 'moderator') {
-    return <Navigate to="/" state={{ from: location, error: 'forbidden' }} replace />;
-  }
+  // Check if user has required permissions
+  const hasRequiredPermissions = useMemo(() => {
+    if (requiredPermissions.length === 0) return true;
+    if (!user?.permissions) return false;
+    return requiredPermissions.some(permission => user.permissions.includes(permission));
+  }, [user?.permissions, requiredPermissions]);
 
-  return <>{children}</>;
+  // Determine if we should show loading or redirect
+  const shouldShowLoader = !_hasHydrated || isLoading || isCheckingAuth;
+  const shouldRedirectToLogin = _hasHydrated && !isLoading && !isCheckingAuth && !isAuthenticated;
+  const shouldRedirectToUnauthorized = _hasHydrated && !isLoading && !isCheckingAuth && isAuthenticated && (!hasRequiredRole || !hasRequiredPermissions);
+
+  // Render content based on auth state
+  const getContent = () => {
+    if (shouldShowLoader) {
+      return <FullPageLoader />;
+    }
+    
+    if (shouldRedirectToLogin) {
+      return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+    
+    if (shouldRedirectToUnauthorized) {
+      return <Navigate to="/unauthorized" replace />;
+    }
+    
+    return <>{children}</>;
+  };
+
+  // Wait for hydration and initial auth check
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsCheckingAuth(false);
+    }, 300); // Slightly longer delay to ensure hydration completes
+    
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Additional check for hydration completion
+  useEffect(() => {
+    if (_hasHydrated && !isLoading) {
+      setIsCheckingAuth(false);
+    }
+  }, [_hasHydrated, isLoading]);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('ProtectedRoute - Auth state:', {
+      isAuthenticated,
+      isLoading,
+      isCheckingAuth,
+      user: user ? { 
+        id: user._id, 
+        role: user.role,
+        hasRequiredRole,
+        hasRequiredPermissions
+      } : null,
+      currentPath: location.pathname,
+      _hasHydrated
+    });
+  }, [isAuthenticated, isLoading, isCheckingAuth, user, location.pathname, hasRequiredRole, hasRequiredPermissions, _hasHydrated]);
+
+  return getContent();
 };
 
 export default ProtectedRoute;
-

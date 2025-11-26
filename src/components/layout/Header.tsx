@@ -1,9 +1,8 @@
 import { motion } from "framer-motion";
 import { Search, Moon, Sun, LogOut, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useAppDispatch } from "@/store/store";
-import { logout } from "@/store/slices/authSlice";
-import { clearStoredAuth } from "@/lib/mockAuth";
+import { useAuthStore } from "@/stores/auth/useAuthStore";
+import type { User } from "@/stores/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,11 +15,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { navLogo } from "@/config/constants";
-import { NotificationDropdown } from "./NotificationDropdown";
 
 interface HeaderProps {
   onThemeToggle: () => void;
-  theme: "light" | "dark";
+  theme: string | undefined;
   sidebarCollapsed: boolean;
   onSidebarToggle: () => void;
 }
@@ -32,13 +30,31 @@ export const Header: React.FC<HeaderProps> = ({
   onSidebarToggle,
 }) => {
   const navigate = useNavigate();
-  const dispatch = useAppDispatch();
+  const { logout: logoutUser, user } = useAuthStore();
 
-  const handleLogout = () => {
-    clearStoredAuth();
-    dispatch(logout());
-    navigate("/");
+  // Provide default user object if not authenticated
+  const safeUser: User = user || {
+    _id: 'guest',
+    email: 'guest@example.com',
+    fName: 'Guest',
+    lName: 'User',
+    role: 'client',
+    isApproved: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
+
+  const handleLogout = async () => {
+    try {
+      if (logoutUser) {
+        await logoutUser();
+      }
+      navigate("/dashboard");
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   return (
     <motion.header
       className="h-16 bg-card border-b border-border glass-card flex items-center justify-between px-6"
@@ -89,9 +105,6 @@ export const Header: React.FC<HeaderProps> = ({
           </Button>
         </motion.div>
 
-        {/* Notifications */}
-        <NotificationDropdown />
-
         {/* User menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -100,10 +113,13 @@ export const Header: React.FC<HeaderProps> = ({
                 variant="ghost"
                 className="relative h-10 w-10 rounded-full"
               >
-                <Avatar className="h-10 w-10 ring-2 ring-primary/20">
-                  <AvatarImage src="/placeholder-avatar.jpg" alt="Admin" />
-                  <AvatarFallback className="bg-gold-gradient text-primary-foreground">
-                    AD
+                <Avatar className="h-8 w-8">
+                  <AvatarImage 
+                    src={safeUser.avatar ? (safeUser.avatar.startsWith('http') ? safeUser.avatar : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${safeUser.avatar}`) : undefined} 
+                    alt={`${safeUser.fName || ''} ${safeUser.lName || ''}`.trim() || 'User'}
+                  />
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                    {safeUser.initials || `${safeUser.fName?.[0] || ''}${safeUser.lName?.[0] || ''}`.toUpperCase() || 'U'}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -116,10 +132,12 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">Admin User</p>
-                <p className="text-xs leading-none text-muted-foreground">
-                  admin@recipeservices.com
+                <p className="text-sm font-medium leading-none">
+                  {`${safeUser.fName || ''} ${safeUser.lName || ''}`.trim() || 'Guest User'}
                 </p>
+                <span className="text-sm text-muted-foreground">
+                  {safeUser.email || 'guest@example.com'}
+                </span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

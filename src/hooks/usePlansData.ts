@@ -1,52 +1,104 @@
 import { useEffect, useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
-import { setPlans, setCustomRequests, updateCustomRequest as updateCustomRequestAction } from '@/store/slices/plansSlice';
+import { setPlans, setCustomRequests, updateCustomRequest as updateCustomRequestAction, setLoading } from '@/store/slices/plansSlice';
 import type { Plan, CustomPlanRequest } from '@/store/slices/plansSlice';
-
-// Mock data outside the component to persist between renders
-const mockPlans: Plan[] = [
-  { id: '1', name: 'Basic', description: 'Perfect for small recipe blogs and personal use', price: 49, duration: 'monthly', features: ['Recipe management system','Basic website template','Up to 100 recipes','Email support','Mobile responsive design'], isCustom: false, isActive: true, createdAt: '2024-01-15T10:30:00Z' },
-  { id: '2', name: 'Premium', description: 'Most popular for growing recipe sharing businesses', price: 99, duration: 'monthly', features: ['Advanced recipe management','Premium website templates','Unlimited recipes','User authentication system','Comment & rating system','SEO optimization','Priority support','Custom branding'], isCustom: false, discount: { percentage: 15, validUntil: '2024-03-31T23:59:59Z' }, isActive: true, createdAt: '2024-01-15T10:30:00Z' },
-  { id: '3', name: 'Enterprise', description: 'For large-scale recipe sharing platforms', price: 199, duration: 'monthly', features: ['Everything in Premium','Multi-user management','Advanced analytics','API access','White-label solution','Custom integrations','Dedicated support manager','On-premise hosting option'], isCustom: false, isActive: true, createdAt: '2024-01-15T10:30:00Z' },
-];
-
-const mockCustomRequests: CustomPlanRequest[] = [
-  { id: '1', userId: '1', userName: 'Restaurant Chain LLC', userEmail: 'contact@restaurantchain.com', requirements: 'Need a multi-location recipe management system with inventory tracking and cost calculation features.', budget: 500, timeline: '3 months', status: 'pending', createdAt: '2024-01-18T14:30:00Z' },
-  { id: '2', userId: '2', userName: 'Culinary School', userEmail: 'admin@culinaryschool.edu', requirements: 'Educational platform for students to share and learn recipes with instructor review system.', budget: 300, timeline: '2 months', status: 'approved', response: 'We can definitely create this educational platform. Our team will start working on the prototype next week.', createdAt: '2024-01-16T09:15:00Z' },
-];
+import { useGetAllPlansQuery, useGetCustomPlanRequestsQuery, useUpdateCustomPlanRequestMutation } from '@/store/api/plansApi';
 
 export const usePlansData = () => {
   const dispatch = useAppDispatch();
-  const { plans, customRequests, loading } = useAppSelector(state => state.plans);
+  const { plans: storedPlans, customRequests: storedCustomRequests, loading } = useAppSelector(state => state.plans);
 
-  // Initialize data on first render
+  // Fetch plans from API
+  const { data: plansData, isLoading: isLoadingPlans, error: plansError } = useGetAllPlansQuery({});
+  
+  // Fetch custom plan requests from API
+  const { data: customRequestsData, isLoading: isLoadingRequests, error: requestsError } = useGetCustomPlanRequestsQuery();
+  
+  // Mutation for updating custom plan requests
+  const [updateRequestApi] = useUpdateCustomPlanRequestMutation();
+
+  // Update Redux store when API data changes
   useEffect(() => {
-    const timer = setTimeout(() => {
-      dispatch(setPlans(mockPlans));
-      dispatch(setCustomRequests(mockCustomRequests));
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [dispatch]);
+    if (plansData) {
+      // Transform API response to match the Plan type
+      const transformedPlans = plansData.map(plan => ({
+        id: plan._id,
+        name: plan.name,
+        description: plan.description,
+        price: plan.price,
+        duration: plan.duration,
+        features: plan.features,
+        isCustom: false,
+        isActive: plan.isActive,
+        discount: plan.discount ? {
+          percentage: plan.discount.type === 'percentage' ? plan.discount.value : 0,
+          validUntil: plan.discount.endDate || ''
+        } : undefined,
+        createdAt: new Date().toISOString()
+      }));
+      
+      dispatch(setPlans(transformedPlans));
+    }
+  }, [plansData, dispatch]);
 
-  // Memoize the update function to prevent unnecessary re-renders
+  // Update custom requests in Redux store
+  useEffect(() => {
+    if (customRequestsData) {
+      // Transform API response to match CustomPlanRequest type if needed
+      const transformedRequests = customRequestsData.map((request: any) => ({
+        ...request,
+        // Add any necessary transformations here
+      }));
+      
+      dispatch(setCustomRequests(transformedRequests));
+    }
+  }, [customRequestsData, dispatch]);
+
+  // Update loading state
+  useEffect(() => {
+    dispatch(setLoading(isLoadingPlans || isLoadingRequests));
+  }, [isLoadingPlans, isLoadingRequests, dispatch]);
+
+  // Handle errors
+  useEffect(() => {
+    if (plansError) {
+      console.error('Error fetching plans:', plansError);
+      // You might want to show a toast notification here
+    }
+    
+    if (requestsError) {
+      console.error('Error fetching custom requests:', requestsError);
+      // You might want to show a toast notification here
+    }
+  }, [plansError, requestsError]);
+
+  // Update custom request status
   const updateCustomRequest = useMemo(
-    () => (request: { id: string; status: 'approved' | 'rejected'; response?: string }) => {
-      return new Promise<void>((resolve) => {
-        // In a real app, you would make an API call here
-        setTimeout(() => {
-          dispatch(updateCustomRequestAction(request));
-          resolve();
-        }, 1000);
-      });
+    () => async (request: { id: string; status: 'approved' | 'rejected'; response?: string }) => {
+      try {
+        await updateRequestApi({
+          id: request.id,
+          status: request.status,
+          response: request.response
+        }).unwrap();
+        
+        // Update local state optimistically
+        dispatch(updateCustomRequestAction(request));
+        return Promise.resolve();
+      } catch (error) {
+        console.error('Failed to update request:', error);
+        return Promise.reject(error);
+      }
     },
-    [dispatch]
+    [dispatch, updateRequestApi]
   );
 
   return { 
-    plans, 
-    customRequests, 
+    plans: storedPlans, 
+    customRequests: storedCustomRequests, 
     loading, 
-    updateCustomRequest 
+    updateCustomRequest,
+    error: plansError || requestsError 
   };
 };
 

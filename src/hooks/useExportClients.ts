@@ -28,7 +28,7 @@ export const useExportClients = () => {
         ...clients.map(client => [
           `"${client.name?.replace(/"/g, '""') || ''}"`,
           `"${client.email || ''}"`,
-          `"${client.phone || ''}"`,
+          `"${client.phoneNumber || ''}"`,
           `"${client.company || ''}"`,
           `"${client.title || ''}"`,
           `"${client.status || ''}"`,
