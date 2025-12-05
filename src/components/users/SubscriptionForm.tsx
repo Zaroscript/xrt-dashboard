@@ -2,7 +2,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { motion } from 'framer-motion';
-import { User } from '@/store/slices/usersSlice';
+import type { User } from '@/stores/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -21,8 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useAppDispatch } from '@/store/store';
-import { updateUser } from '@/store/slices/usersSlice';
+import { useUsersStore, useSubscribersStore, usePlansStore } from '@/stores/index';
 import { useToast } from '@/components/ui/use-toast';
 import { X } from 'lucide-react';
 import { format } from 'date-fns';
@@ -58,27 +57,31 @@ interface SubscriptionFormProps {
 }
 
 export const SubscriptionForm = ({ user, onSuccess, onCancel }: SubscriptionFormProps) => {
-  const dispatch = useAppDispatch();
+  const { updateUser } = useUsersStore();
+  const { createSubscriber, getSubscribersByUser } = useSubscribersStore();
+  const { plans } = usePlansStore();
   const { toast } = useToast();
+
+  // Get existing subscription
+  const existingSubscription = getSubscribersByUser(user._id)[0];
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      isClient: user.isClient ?? false,
-      subscription: user.subscription ? {
-        ...user.subscription,
-        // Convert amount to number if it's a string
-        amount: typeof user.subscription.amount === 'string' 
-          ? parseFloat(user.subscription.amount) 
-          : user.subscription.amount,
-        // Format date for date input
-        expiresAt: user.subscription.expiresAt
-          ? format(new Date(user.subscription.expiresAt), "yyyy-MM-dd")
+      isClient: user.role === 'client' || !!existingSubscription,
+      subscription: existingSubscription ? {
+        plan: typeof existingSubscription.plan.plan === 'string' 
+          ? existingSubscription.plan.plan 
+          : existingSubscription.plan.plan?._id || 'basic',
+        status: existingSubscription.plan?.status || 'active',
+        amount: existingSubscription.plan?.price || subscriptionPlans[0].price,
+        expiresAt: existingSubscription.plan?.endDate
+          ? format(new Date(existingSubscription.plan.endDate), "yyyy-MM-dd")
           : format(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
       } : {
-        plan: 'basic',
+        plan: plans[0]?._id || 'basic',
         status: 'active',
-        amount: subscriptionPlans[0].price,
+        amount: plans[0]?.price || subscriptionPlans[0].price,
         expiresAt: format(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
       },
     },
@@ -87,24 +90,57 @@ export const SubscriptionForm = ({ user, onSuccess, onCancel }: SubscriptionForm
   const isClient = form.watch('isClient');
   const selectedPlan = form.watch('subscription.plan');
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
-    const updatedUser: User = {
-      ...user,
-      isClient: values.isClient,
-      subscription: values.isClient ? {
-        ...values.subscription!,
-        expiresAt: new Date(values.subscription!.expiresAt).toISOString(),
-      } : undefined,
-    };
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      if (values.isClient && values.subscription) {
+        // Create or update subscription
+        if (!existingSubscription) {
+          // Create new subscriber
+          await createSubscriber({
+            userId: user._id,
+            planId: values.subscription.plan,
+            notes: 'Created via UserCard',
+          });
+        } else {
+          // Update existing subscription using the subscriber store
+          const { updateSubscriberApi } = useSubscribersStore.getState();
+          await updateSubscriberApi(existingSubscription._id, {
+            plan: {
+              ...existingSubscription.plan,
+              plan: values.subscription.plan,
+              status: values.subscription.status as any,
+              price: values.subscription.amount,
+              endDate: values.subscription.expiresAt,
+            },
+            status: values.subscription.status as any,
+          });
+        }
 
-    dispatch(updateUser(updatedUser));
-    
-    toast({
-      title: 'Subscription updated',
-      description: `User's ${values.isClient ? 'subscription has been updated' : 'client status has been removed'}`,
-    });
+        // Update user role to client if not already
+        if (user.role !== 'client') {
+          await updateUser({ _id: user._id, role: 'client' });
+        }
+      } else {
+        // Remove client status - would need to deactivate subscription
+        if (user.role === 'client') {
+          await updateUser({ _id: user._id, role: 'subscriber' });
+        }
+      }
+      
+      toast({
+        title: 'Subscription updated',
+        description: `User's ${values.isClient ? 'subscription has been updated' : 'client status has been removed'}`,
+      });
 
-    if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess();
+    } catch (error) {
+      console.error('Error updating subscription:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update subscription. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -125,7 +161,7 @@ export const SubscriptionForm = ({ user, onSuccess, onCancel }: SubscriptionForm
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-foreground">
-              {user.isClient ? 'Update Subscription' : 'Add Subscription'}
+              {user.role === 'client' ? 'Update Subscription' : 'Add Subscription'}
             </h2>
             <Button
               variant="ghost"
@@ -173,18 +209,23 @@ export const SubscriptionForm = ({ user, onSuccess, onCancel }: SubscriptionForm
                         <Select onValueChange={(value) => {
                           field.onChange(value);
                           // Update amount when plan changes
-                          const plan = subscriptionPlans.find(p => p.id === value);
+                          const plan = plans.find(p => p._id === value) || subscriptionPlans.find(p => p.id === value);
                           if (plan) {
-                            form.setValue('subscription.amount', plan.price);
+                            const price = 'price' in plan ? plan.price : plan.price;
+                            form.setValue('subscription.amount', price);
                           }
-                        }} defaultValue={field.value}>
+                        }} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select a plan" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {subscriptionPlans.map((plan) => (
+                            {plans.length > 0 ? plans.map((plan) => (
+                              <SelectItem key={plan._id} value={plan._id}>
+                                {plan.name} (${plan.price}/{plan.billingCycle})
+                              </SelectItem>
+                            )) : subscriptionPlans.map((plan) => (
                               <SelectItem key={plan.id} value={plan.id}>
                                 {plan.name} (${plan.price}/month)
                               </SelectItem>

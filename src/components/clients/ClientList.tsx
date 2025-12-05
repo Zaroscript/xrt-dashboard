@@ -5,6 +5,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { clientsService } from "@/services/api/clientsService";
 import { User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 import ClientCard from "./ClientCard";
 
@@ -20,34 +21,95 @@ function isUserRef(user: any): user is UserRef {
   return user && typeof user === "object" && "_id" in user;
 }
 
-// Utility function to transform client data from store type to ClientCard type
+// Convert store client data into what our ClientCard component expects
 export function transformClientForList(client: Client): Client {
-  const user =
-    typeof client.user === "string" || !client.user
+  // Keep the user object if we have it, otherwise create one
+  const user: UserRef =
+    typeof client.user === "object" && client.user !== null && client.user._id
+      ? client.user as UserRef  // Use the populated user object as-is
+      : typeof client.user === "string"
       ? {
-          _id: typeof client.user === "string" ? client.user : "unknown",
-          email: "",
+          // If user is just a string ID, create a minimal user object
+          _id: client.user,
+          email: client.email || "",
+          fName: "",
+          lName: "",
+          phone: client.phone || "",
+        }
+      : {
+          // Fallback if user is missing
+          _id: "unknown",
+          email: client.email || "",
           fName: "Unknown",
           lName: "User",
-          phone: "",
-        }
-      : client.user;
+          phone: client.phone || "",
+        };
 
-  // Get status from user or default to 'inactive'
-  const status = (user as any)?.status || "inactive";
+  // Figure out the client's status based on various properties
+  // Priority: isApproved check > user.status > client.status > isActive check
+  const getStatus = (): string => {
+    // Priority 1: Check isApproved FIRST (if false, user is pending)
+    if ((user as any)?.isApproved === false) {
+      return "pending";
+    }
+    
+    // Priority 2: Check user status
+    if ((user as any)?.status) {
+      const userStatus = (user as any).status.toLowerCase();
+      if (userStatus === "pending") {
+        return "pending";
+      }
+      if (["active", "inactive", "suspended", "blocked"].includes(userStatus)) {
+        return userStatus;
+      }
+    }
+    
+    // Priority 3: Check client.status
+    if (client.status) {
+      const clientStatus = client.status.toLowerCase();
+      if (clientStatus === "pending") {
+        return "pending";
+      }
+      if (["active", "inactive", "suspended", "blocked"].includes(clientStatus)) {
+        return clientStatus;
+      }
+    }
+    
+    // Priority 4: Check isActive
+    if (client.isActive === false) {
+      return "inactive";
+    }
+    
+    if ((user as any)?.isActive === false) {
+      return "inactive";
+    }
+    
+    // Only default to active if user is approved AND active
+    if ((user as any)?.isApproved === true && (client.isActive === true || client.isActive === undefined)) {
+      return "active";
+    }
+    
+    // If we can't determine, default to pending (safer default for new registrations)
+    return "pending";
+  };
+  
+  const status = getStatus();
 
-  // Create the transformed client
+  // Create the transformed client - preserve all original data
   const transformed: Client = {
+    ...client, // Spread all original client properties first
     _id: client._id,
-    user: user as UserRef,
-    isClient: true,
-    companyName: client.companyName,
-    businessLocation: client.businessLocation,
-    oldWebsite: client.oldWebsite,
-    taxId: client.taxId,
-    notes: client.notes,
-    isActive: client.isActive,
-    services: client.services,
+    user: user, // Use the preserved/constructed user object
+    isClient: client.isClient !== undefined ? client.isClient : true,
+    companyName: client.companyName || "",
+    businessLocation: client.businessLocation || {
+      street: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      country: "USA",
+    },
+    isActive: client.isActive !== undefined ? client.isActive : true,
     currentPlan:
       typeof client.currentPlan === "string"
         ? client.currentPlan
@@ -60,32 +122,32 @@ export function transformClientForList(client: Client): Client {
             features: client.currentPlan.features,
             isActive: client.currentPlan.isActive,
           }
-        : "basic",
-    createdAt: client.createdAt,
-    updatedAt: client.updatedAt,
-    lastActive: client.updatedAt,
-    revenue: 0,
-    name: `${user.fName || ""} ${user.lName || ""}`.trim() || "Unnamed Client",
-    email: user.email || "",
-    phone: user.phone || "",
+        : undefined,
+    createdAt: client.createdAt || new Date().toISOString(),
+    updatedAt: client.updatedAt || new Date().toISOString(),
+    lastActive: client.lastActive || client.updatedAt || new Date().toISOString(),
+    revenue: client.revenue || 0,
+    name: client.name || `${user.fName || ""} ${user.lName || ""}`.trim() || client.companyName || "Unnamed Client",
+    email: client.email || user.email || "",
+    phone: client.phone || user.phone || "",
     status,
-    subscription: {
+    subscription: client.subscription || {
       plan: client.currentPlan
         ? typeof client.currentPlan === "string"
           ? client.currentPlan
-          : "basic"
+          : client.currentPlan
         : "basic",
       status: client.isActive ? ("active" as const) : ("cancelled" as const),
       amount: 0,
-      startDate: client.createdAt,
+      startDate: client.createdAt || new Date().toISOString(),
       expiresAt: client.isActive
         ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        : client.createdAt,
-      lastBillingDate: client.createdAt,
+        : client.createdAt || new Date().toISOString(),
+      lastBillingDate: client.createdAt || new Date().toISOString(),
       nextBillingDate: client.isActive
         ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        : null,
-      trialEndsAt: null,
+        : undefined,
+      trialEndsAt: undefined,
     },
   };
 
@@ -151,7 +213,9 @@ export function ClientList({
 
   // Transform clients data for the list view
   const transformedClients = useMemo(() => {
-    return clients.map((client: any) => transformClientForList(client));
+    // Handle both paginated response and direct array cases
+    const clientsArray = Array.isArray(clients) ? clients : clients?.clients || [];
+    return clientsArray.map((client: any) => transformClientForList(client));
   }, [clients]);
 
   // Handle client updates from ClientCard
@@ -230,13 +294,9 @@ export function ClientList({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <AnimatePresence mode="wait">
           {isLoading ? (
-            // Loading skeleton
-            Array.from({ length: 6 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-64 bg-gray-100 rounded-lg animate-pulse"
-              />
-            ))
+            <div className="col-span-full flex items-center justify-center py-12">
+              <LoadingSpinner size="md" text="Loading clients..." />
+            </div>
           ) : paginatedClients.length > 0 ? (
             paginatedClients.map((client) => {
               // Find the corresponding base client for ClientCard

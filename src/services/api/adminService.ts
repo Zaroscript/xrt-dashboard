@@ -200,8 +200,29 @@ export const adminService = {
 
   // Moderators
   getModerators: async (): Promise<any[]> => {
-    const response = await apiClient.get("/admin/users/moderators");
-    return response.data.data.moderators;
+    try {
+      const response = await apiClient.get("/admin/users/moderators");
+      
+      // Handle different possible response structures
+      if (response.data?.data?.moderators) {
+        return response.data.data.moderators;
+      } else if (response.data?.moderators) {
+        return response.data.moderators;
+      } else if (Array.isArray(response.data?.data)) {
+        return response.data.data;
+      } else if (Array.isArray(response.data)) {
+        return response.data;
+      } else if (response.data?.data && typeof response.data.data === 'object') {
+        // If it's an object with user data, convert to array
+        return [response.data.data];
+      }
+      console.warn('Unexpected moderators response structure:', response.data);
+      return [];
+    } catch (error: any) {
+      console.error('Error fetching moderators:', error);
+      // Return empty array on error to prevent UI crashes
+      return [];
+    }
   },
 
   createModerator: async (data: {
@@ -210,7 +231,8 @@ export const adminService = {
     password?: string;
   }): Promise<any> => {
     const response = await apiClient.post("/admin/users/moderator", data);
-    return response.data.data.moderator;
+    // Handle different response structures
+    return response.data.data?.moderator || response.data.moderator || response.data;
   },
 
   updateModerator: async (
@@ -221,7 +243,8 @@ export const adminService = {
       `/admin/users/moderator/${id}`,
       data
     );
-    return response.data.data.moderator;
+    // Handle different response structures
+    return response.data.data?.moderator || response.data.moderator || response.data;
   },
 
   deleteModerator: async (id: string): Promise<void> => {

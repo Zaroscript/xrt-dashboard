@@ -48,13 +48,12 @@ export function AddSubscriberDialog({
   onOpenChange,
   onSubscriberAdded,
 }: AddSubscriberDialogProps) {
-  const { createSubscriber } = useSubscribersStore();
+  const { createSubscriber, subscribers, fetchSubscribers } = useSubscribersStore();
   const { clients, fetchClients } = useClientsStore();
   const { plans, fetchPlans } = usePlansStore();
   const [step, setStep] = useState<
-    "select-method" | "create-client" | "configure-subscription"
-  >("select-method");
-  const [method, setMethod] = useState<"existing" | "new" | null>(null);
+    "select-client" | "configure-subscription"
+  >("select-client");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -62,12 +61,12 @@ export function AddSubscriberDialog({
     if (open) {
       fetchClients();
       fetchPlans();
-      setStep("select-method");
-      setMethod(null);
+      fetchSubscribers();
+      setStep("select-client");
       setSelectedClient(null);
       form.reset();
     }
-  }, [open, fetchClients, fetchPlans]);
+  }, [open, fetchClients, fetchPlans, fetchSubscribers]);
 
   const form = useForm<SubscriberFormValues>({
     resolver: zodResolver(subscriberFormSchema),
@@ -77,6 +76,27 @@ export function AddSubscriberDialog({
       notes: "",
     },
   });
+
+  // Helper function to check if client already has a subscription
+  const hasExistingSubscription = (clientId: string): boolean => {
+    // Check if client has subscription in client data
+    const client = clients.find((c) => c._id === clientId);
+    if (client?.subscription) {
+      return true;
+    }
+    
+    // Also check if there's a subscriber record for this client's user
+    const userId = typeof client?.user === "string" ? client.user : client?.user?._id;
+    if (userId) {
+      return subscribers.some((subscriber) => 
+        typeof subscriber.user === "string" 
+          ? subscriber.user === userId 
+          : subscriber.user._id === userId
+      );
+    }
+    
+    return false;
+  };
 
   const handleClientSelect = (clientId: string) => {
     const client = clients.find((c) => c._id === clientId);
@@ -100,19 +120,7 @@ export function AddSubscriberDialog({
     }
   };
 
-  const handleMethodSelect = (selectedMethod: "existing" | "new") => {
-    setMethod(selectedMethod);
-    if (selectedMethod === "existing") {
-      // Stay on same view but show select
-    } else {
-      // For new client, we would ideally show a client creation form
-      // For now, let's just redirect to client creation page or show a message
-      // But the requirement says "Create New Client: Form to create client -> Auto-proceed"
-      // Since creating a full client form here is complex, I'll add a placeholder or simple form
-      setStep("create-client");
-    }
-  };
-
+  
   const onSubmit = async (data: SubscriberFormValues) => {
     setLoading(true);
     try {
@@ -138,55 +146,15 @@ export function AddSubscriberDialog({
         <DialogHeader>
           <DialogTitle>Add New Subscriber</DialogTitle>
           <DialogDescription>
-            {step === "select-method" &&
-              "Choose how you want to add a subscriber."}
-            {step === "create-client" && "Create a new client account."}
+            {step === "select-client" &&
+              "Select an existing client to create a subscription for."}
             {step === "configure-subscription" &&
               "Configure subscription details."}
           </DialogDescription>
         </DialogHeader>
 
-        {step === "select-method" && (
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <Button
-              variant="outline"
-              className="h-32 flex flex-col gap-2 hover:border-primary hover:bg-primary/5"
-              onClick={() => handleMethodSelect("existing")}
-            >
-              <User className="h-8 w-8" />
-              <span>Select Existing Client</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-32 flex flex-col gap-2 hover:border-primary hover:bg-primary/5"
-              onClick={() => handleMethodSelect("new")}
-            >
-              <div className="relative">
-                <User className="h-8 w-8" />
-                <div className="absolute -right-1 -bottom-1 bg-primary text-primary-foreground rounded-full p-0.5">
-                  <span className="sr-only">New</span>
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                </div>
-              </div>
-              <span>Create New Client</span>
-            </Button>
-          </div>
-        )}
-
-        {step === "select-method" && method === "existing" && (
-          <div className="space-y-4 pt-4 border-t">
+        {step === "select-client" && (
+          <div className="space-y-4 pt-4">
             <div className="space-y-2">
               <Label>Select Client</Label>
               <Select onValueChange={handleClientSelect}>
@@ -194,47 +162,38 @@ export function AddSubscriberDialog({
                   <SelectValue placeholder="Search for a client..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {clients.map((client) => (
-                    <SelectItem key={client._id} value={client._id}>
-                      {client.companyName} (
-                      {typeof client.user === "object"
-                        ? client.user.email
-                        : "No email"}
-                      )
-                    </SelectItem>
-                  ))}
+                  {clients.map((client) => {
+                    const hasSubscription = hasExistingSubscription(client._id);
+                    return (
+                      <SelectItem 
+                        key={client._id} 
+                        value={client._id}
+                        disabled={hasSubscription}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span>
+                            {client.companyName} (
+                            {typeof client.user === "object"
+                              ? client.user.email
+                              : "No email"}
+                            )
+                          </span>
+                          {hasSubscription && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              Already subscribed
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
-            <Button
-              variant="ghost"
-              onClick={() => setMethod(null)}
-              className="w-full"
-            >
-              Back
-            </Button>
           </div>
         )}
 
-        {step === "create-client" && (
-          <div className="space-y-4 py-4">
-            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-400 rounded-md text-sm">
-              To create a new subscriber from a new client, please go to the
-              Clients page, create the client, and then assign a subscription.
-              <br />
-              <br />
-              (Full client creation form integration coming soon)
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => setStep("select-method")}
-              className="w-full"
-            >
-              Back
-            </Button>
-          </div>
-        )}
-
+        
         {step === "configure-subscription" && (
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             {selectedClient && (
@@ -283,7 +242,7 @@ export function AddSubscriberDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setStep("select-method")}
+                onClick={() => setStep("select-client")}
               >
                 Back
               </Button>

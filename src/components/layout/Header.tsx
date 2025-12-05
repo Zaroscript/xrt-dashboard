@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { navLogo } from "@/config/constants";
+import { getAvatarUrl, getUserInitials } from "@/utils/avatarUtils";
 
 interface HeaderProps {
   onThemeToggle: () => void;
@@ -115,11 +116,11 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Avatar className="h-8 w-8">
                   <AvatarImage 
-                    src={safeUser.avatar ? (safeUser.avatar.startsWith('http') ? safeUser.avatar : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${safeUser.avatar}`) : undefined} 
+                    src={getAvatarUrl(safeUser.avatar)} 
                     alt={`${safeUser.fName || ''} ${safeUser.lName || ''}`.trim() || 'User'}
                   />
                   <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                    {safeUser.initials || `${safeUser.fName?.[0] || ''}${safeUser.lName?.[0] || ''}`.toUpperCase() || 'U'}
+                    {safeUser.initials || getUserInitials(safeUser.fName, safeUser.lName, safeUser.email)}
                   </AvatarFallback>
                 </Avatar>
               </Button>

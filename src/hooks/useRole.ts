@@ -1,8 +1,8 @@
 import { useAuthStore } from '@/stores/auth/useAuthStore';
 
 /**
- * Hook to check if the current user is a super admin
- * @returns boolean - true if user is 'super_admin', false otherwise
+ * Check if the current user is a super admin
+ * @returns true if user has super admin powers
  */
 export const useIsSuperAdmin = (): boolean => {
   const { user } = useAuthStore();
@@ -10,8 +10,9 @@ export const useIsSuperAdmin = (): boolean => {
 };
 
 /**
- * Hook to check if the current user has permission to modify data
- * @returns boolean - true if user is 'super_admin', false if 'moderator' or other
+ * Check if the current user can modify stuff
+ * Only super admins can modify data, moderators can't
+ * @returns true if user can make changes
  */
 export const useCanModify = (): boolean => {
   return useIsSuperAdmin();

@@ -2,21 +2,21 @@ import { Client as ApiClient } from '../services/api/clientsService';
 import { Client as AppClient, ClientStatus } from '../types/client.types';
 
 export const mapApiClientToClient = (apiClient: ApiClient): AppClient => {
-  // Create a properly typed address object with all required fields
+  // Build a complete address object, filling in any missing pieces
   const address = {
-    street: apiClient.address?.street || '',
-    city: apiClient.address?.city || '',
-    state: apiClient.address?.state || '',
-    zipCode: apiClient.address?.zipCode || apiClient.address?.postalCode || '',
-    postalCode: apiClient.address?.postalCode || apiClient.address?.zipCode || '',
-    country: apiClient.address?.country || ''
+    street: apiClient.businessLocation?.street || '',
+    city: apiClient.businessLocation?.city || '',
+    state: apiClient.businessLocation?.state || '',
+    zipCode: apiClient.businessLocation?.zipCode || apiClient.businessLocation?.postalCode || '',
+    postalCode: apiClient.businessLocation?.postalCode || apiClient.businessLocation?.zipCode || '',
+    country: apiClient.businessLocation?.country || ''
   };
 
   return {
-    // Core client information
+    // The essential client details
     _id: apiClient._id,
     
-    // User information
+    // The user's personal information
     user: typeof apiClient.user === 'string' ? {
       _id: apiClient.user,
       fName: '',
@@ -31,15 +31,12 @@ export const mapApiClientToClient = (apiClient: ApiClient): AppClient => {
       phone: apiClient.user.phone || ''
     },
     
-    // Business information
+    // Company-related details
     companyName: apiClient.companyName || '',
     name: typeof apiClient.user === 'string' ? apiClient.user : `${apiClient.user.fName} ${apiClient.user.lName}`,
     email: typeof apiClient.user === 'string' ? '' : apiClient.user.email,
     phone: typeof apiClient.user === 'string' ? '' : (apiClient.user.phone || ''),
-    phoneNumber: typeof apiClient.user === 'string' ? '' : (apiClient.user.phone || ''),
-    company: apiClient.companyName || '',
-    website: apiClient.oldWebsite || '',
-    address,
+    oldWebsite: apiClient.oldWebsite || '',
     isClient: true,
     isActive: true,
     status: 'active' as ClientStatus,
@@ -49,8 +46,15 @@ export const mapApiClientToClient = (apiClient: ApiClient): AppClient => {
     revenue: 0,
     currentPlan: apiClient.subscription?.plan || '',
     services: [],
-    businessLocation: apiClient.businessLocation || '',
-    // Map subscription data if available
+    businessLocation: apiClient.businessLocation || {
+      street: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      postalCode: '',
+      country: ''
+    },
+    // Include subscription info if the client has one
     ...(apiClient.subscription && {
       subscription: {
         plan: apiClient.subscription.plan,
@@ -58,7 +62,6 @@ export const mapApiClientToClient = (apiClient: ApiClient): AppClient => {
         startDate: apiClient.subscription.startDate || '',
         expiresAt: apiClient.subscription.expiresAt || '',
         amount: apiClient.subscription.amount || 0,
-        paymentMethod: apiClient.subscription.paymentMethod || '',
         lastBillingDate: apiClient.subscription.lastBillingDate || '',
         nextBillingDate: apiClient.subscription.nextBillingDate || '',
         trialEndsAt: apiClient.subscription.trialEndsAt || '',

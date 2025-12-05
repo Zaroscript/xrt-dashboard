@@ -2,20 +2,13 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AddClientForm } from './AddClientForm';
-import { useAppDispatch } from '@/store/store';
-import { addNotification } from '@/store/slices/notificationsSlice';
 
 export const AddClientModal = ({ onClientAdded }: { onClientAdded?: () => void }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const dispatch = useAppDispatch();
 
   const handleSuccess = () => {
     setIsOpen(false);
-    dispatch(addNotification({
-      title: 'New Client Added',
-      description: 'A new client has been added successfully.',
-    }));
+    // TODO: Add notification when notifications store is available
     if (onClientAdded) onClientAdded();
   };
 
@@ -27,14 +20,38 @@ export const AddClientModal = ({ onClientAdded }: { onClientAdded?: () => void }
 
       <AnimatePresence>
         {isOpen && (
-          <AddClientForm 
-            onSuccess={handleSuccess} 
-            onCancel={() => setIsOpen(false)} 
-          />
+          <motion.div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsOpen(false)}
+          >
+            <motion.div 
+              className="bg-card rounded-lg shadow-lg w-full max-w-md p-6"
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold mb-4">Add Client</h2>
+              <p className="text-muted-foreground mb-4">
+                Client form functionality will be implemented soon.
+              </p>
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setIsOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSuccess}>
+                  Add Client (Placeholder)
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </>
   );
 };
 
-export default AddUserModal;
+export default AddClientModal;

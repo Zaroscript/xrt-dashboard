@@ -168,6 +168,7 @@ export function ClientInfoCard({
               <span className="font-mono">
                 {showPassword
                   ? (typeof client.user === "object" &&
+                      client.user &&
                       (client.user as any).plainPassword) ||
                     "Not available"
                   : "••••••••••••"}

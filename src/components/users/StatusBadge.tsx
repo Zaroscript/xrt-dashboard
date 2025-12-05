@@ -1,8 +1,17 @@
 import { Badge } from '@/components/ui/badge';
-import type { User } from '@/store/slices/usersSlice';
+import type { User } from '@/stores/types';
 
-export const StatusBadge = ({ status }: { status: User['status'] }) => {
-  const variants: Record<User['status'], string> = {
+// Figure out the user's status from their properties
+const getUserStatus = (user: User): 'pending' | 'active' | 'blocked' | 'rejected' => {
+  if (!user.isApproved) return 'pending';
+  if (!user.isActive) return 'blocked';
+  return 'active';
+};
+
+export const StatusBadge = ({ user }: { user: User }) => {
+  const status = getUserStatus(user);
+  
+  const variants: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
     active: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
     blocked: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
@@ -10,7 +19,7 @@ export const StatusBadge = ({ status }: { status: User['status'] }) => {
   };
 
   return (
-    <Badge className={variants[status]}>
+    <Badge className={`text-xs ${variants[status]}`}>
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </Badge>
   );

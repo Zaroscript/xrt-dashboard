@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
-import { useAuthStore } from '@/stores/auth/useAuthStore';
-import { dashboardService } from '@/services/api/dashboardService';
-import { AxiosError } from 'axios';
+import { useQuery } from "@tanstack/react-query";
+import { useAuthStore } from "@/stores/auth/useAuthStore";
+import { dashboardService } from "@/services/api/dashboardService";
+import { AxiosError } from "axios";
 
 export interface Activity {
   id: string;
@@ -17,9 +17,8 @@ export interface DashboardStats {
   totalRevenue: number;
   totalTickets: number;
   activeUsers?: number;
-  activeSubscriptions?: number;
+  activePlans?: number;
   pendingTickets?: number;
-  portfolioProjects?: number;
   activeClients?: number;
   trialClients?: number;
   premiumClients?: number;
@@ -29,12 +28,6 @@ export interface RevenueData {
   month: string;
   revenue: number;
   users: number;
-}
-
-export interface TicketsData {
-  week: string;
-  open: number;
-  resolved: number;
 }
 
 export interface UsersGrowthData {
@@ -53,7 +46,6 @@ interface Client {
 interface DashboardData {
   stats: DashboardStats;
   revenue: RevenueData[];
-  tickets: TicketsData[];
   usersGrowth: UsersGrowthData[];
   activities: Activity[];
   clients: Client[];
@@ -65,9 +57,11 @@ interface UseDashboardOptions {
 
 // No default data generation needed
 
-export const useDashboard = ({ includeAdminData = false }: UseDashboardOptions = {}) => {
+export const useDashboard = ({
+  includeAdminData = false,
+}: UseDashboardOptions = {}) => {
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'super_admin' || user?.role === 'moderator';
+  const isAdmin = user?.role === "super_admin" || user?.role === "moderator";
 
   // Fetch all dashboard data in a single query
   const defaultData: DashboardData = {
@@ -78,10 +72,9 @@ export const useDashboard = ({ includeAdminData = false }: UseDashboardOptions =
       totalTickets: 0,
     },
     revenue: [],
-    tickets: [],
     usersGrowth: [],
     activities: [],
-    clients: []
+    clients: [],
   };
 
   const {
@@ -90,16 +83,17 @@ export const useDashboard = ({ includeAdminData = false }: UseDashboardOptions =
     error,
     refetch,
   } = useQuery<DashboardData, AxiosError>({
-    queryKey: ['dashboard', 'all'],
+    queryKey: ["dashboard", "all"],
     queryFn: async () => {
       try {
         const data = await dashboardService.getAllDashboardData();
         return data as DashboardData;
       } catch (error) {
         if (error instanceof AxiosError) {
-          console.error('API Error:', error.response?.data || error.message);
+          console.error("API Error:", error.response?.data || error.message);
           throw new Error(
-            error.response?.data?.message || 'Failed to fetch dashboard data. Please try again.'
+            error.response?.data?.message ||
+              "Failed to fetch dashboard data. Please try again."
           );
         }
         throw error;
@@ -108,7 +102,8 @@ export const useDashboard = ({ includeAdminData = false }: UseDashboardOptions =
     enabled: !!user, // Changed from user?.token to just user
     refetchOnWindowFocus: false,
     retry: 1,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5000, // 5 seconds
+    refetchInterval: 5000, // Poll every 5 seconds
   });
 
   // Destructure the data directly from the API response
@@ -116,65 +111,50 @@ export const useDashboard = ({ includeAdminData = false }: UseDashboardOptions =
   const {
     stats,
     revenue = [],
-    tickets = [],
     usersGrowth = [],
     activities = [],
-    clients = []
+    clients = [],
   } = dashboardData || {};
 
   // Format data for charts with optional chaining to prevent undefined errors
   const chartData = {
     revenue: {
-      labels: revenue?.map(item => item.month) ?? [],
+      labels: revenue?.map((item) => item.month) ?? [],
       datasets: [
         {
-          label: 'Revenue',
-          data: revenue?.map(item => item.revenue) ?? [],
-          borderColor: '#7c3aed',
-          backgroundColor: 'rgba(124, 58, 237, 0.1)',
+          label: "Revenue",
+          data: revenue?.map((item) => item.revenue) ?? [],
+          borderColor: "#7c3aed",
+          backgroundColor: "rgba(124, 58, 237, 0.1)",
           tension: 0.3,
-          yAxisID: 'y',
+          yAxisID: "y",
         },
         {
-          label: 'Users',
-          data: revenue?.map(item => item.users * 100) ?? [],
-          borderColor: '#10b981',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          label: "Users",
+          data: revenue?.map((item) => item.users * 100) ?? [],
+          borderColor: "#10b981",
+          backgroundColor: "rgba(16, 185, 129, 0.1)",
           tension: 0.3,
-          yAxisID: 'y1',
+          yAxisID: "y1",
         },
       ],
     },
-    tickets: {
-      labels: tickets?.map(item => item.week) ?? [],
-      datasets: [
-        {
-          label: 'Open Tickets',
-          data: tickets?.map(item => item.open) ?? [],
-          backgroundColor: '#f59e0b',
-        },
-        {
-          label: 'Resolved Tickets',
-          data: tickets?.map(item => item.resolved) ?? [],
-          backgroundColor: '#10b981',
-        },
-      ],
-    },
+
     usersGrowth: {
-      labels: usersGrowth?.map(item => item.month) ?? [],
+      labels: usersGrowth?.map((item) => item.month) ?? [],
       datasets: [
         {
-          label: 'New Users',
-          data: usersGrowth?.map(item => item.users) ?? [],
-          borderColor: '#3b82f6',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          label: "New Users",
+          data: usersGrowth?.map((item) => item.users) ?? [],
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59, 130, 246, 0.1)",
           tension: 0.3,
         },
         {
-          label: 'New Clients',
-          data: usersGrowth?.map(item => item.clients) ?? [],
-          borderColor: '#8b5cf6',
-          backgroundColor: 'rgba(139, 92, 246, 0.1)',
+          label: "New Clients",
+          data: usersGrowth?.map((item) => item.clients) ?? [],
+          borderColor: "#8b5cf6",
+          backgroundColor: "rgba(139, 92, 246, 0.1)",
           tension: 0.3,
         },
       ],
@@ -185,21 +165,20 @@ export const useDashboard = ({ includeAdminData = false }: UseDashboardOptions =
     // Core data
     stats,
     revenue,
-    tickets,
     usersGrowth,
     activities,
     clients,
-    
+
     // Formatted chart data
     chartData,
-    
+
     // Loading and error states
     isLoading,
     error,
-    
+
     // Refresh function
     refetch,
-    
+
     // User info
     isAdmin,
     user,

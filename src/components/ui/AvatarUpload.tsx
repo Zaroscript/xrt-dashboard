@@ -3,6 +3,18 @@ import { Upload, X, Loader2 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from './avatar';
 import { Button } from './button';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/use-toast';
+import { getAvatarUrl, validateAvatarFile } from '@/utils/avatarUtils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface AvatarUploadProps {
   currentAvatar?: string | null;
@@ -28,23 +40,25 @@ export const AvatarUpload: React.FC<AvatarUploadProps> = ({
   className,
   size = 'lg'
 }) => {
+  const { toast } = useToast();
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [cacheBust, setCacheBust] = useState<number>(Date.now());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (file: File) => {
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file');
-      return;
-    }
-
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image size must be less than 5MB');
+    // Validate file
+    const validation = validateAvatarFile(file);
+    if (!validation.isValid) {
+      toast({
+        title: 'Invalid file',
+        description: validation.error,
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -59,10 +73,20 @@ export const AvatarUpload: React.FC<AvatarUploadProps> = ({
     try {
       setIsUploading(true);
       await onUpload(file);
-    } catch (error) {
+      // Update cache bust to force refresh
+      setCacheBust(Date.now());
+      toast({
+        title: 'Avatar uploaded',
+        description: 'Your profile picture has been updated successfully.',
+      });
+    } catch (error: any) {
       console.error('Upload error:', error);
-      alert('Failed to upload avatar');
       setPreview(null);
+      toast({
+        title: 'Upload failed',
+        description: error?.response?.data?.message || 'Failed to upload avatar. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsUploading(false);
     }
@@ -91,43 +115,54 @@ export const AvatarUpload: React.FC<AvatarUploadProps> = ({
   const handleDelete = async () => {
     if (!onDelete) return;
     
-    if (confirm('Are you sure you want to remove your avatar?')) {
-      try {
-        setIsUploading(true);
-        await onDelete();
-        setPreview(null);
-      } catch (error) {
-        console.error('Delete error:', error);
-        alert('Failed to delete avatar');
-      } finally {
-        setIsUploading(false);
-      }
+    try {
+      setIsUploading(true);
+      await onDelete();
+      setPreview(null);
+      setCacheBust(Date.now());
+      setShowDeleteDialog(false);
+      toast({
+        title: 'Avatar removed',
+        description: 'Your profile picture has been removed successfully.',
+      });
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      toast({
+        title: 'Delete failed',
+        description: error?.response?.data?.message || 'Failed to remove avatar. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const avatarSrc = preview || currentAvatar;
+  const displayUrl = avatarSrc ? getAvatarUrl(avatarSrc, cacheBust) : undefined;
 
   return (
-    <div className={cn('flex flex-col items-center gap-4', className)}>
-      <div
-        className={cn(
-          'relative group',
-          sizeClasses[size],
-          dragActive && 'ring-2 ring-primary ring-offset-2'
-        )}
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-      >
-        <Avatar className={cn('h-full w-full', sizeClasses[size])}>
-          <AvatarImage 
-            src={avatarSrc ? `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${avatarSrc}` : undefined} 
-          />
-          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-semibold">
-            {initials.charAt(0).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+    <>
+      <div className={cn('flex flex-col items-center gap-4', className)}>
+        <div
+          className={cn(
+            'relative group',
+            sizeClasses[size],
+            dragActive && 'ring-2 ring-primary ring-offset-2'
+          )}
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+        >
+          <Avatar className={cn('h-full w-full', sizeClasses[size])}>
+            <AvatarImage 
+              src={displayUrl}
+              alt="Profile picture"
+            />
+            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-semibold">
+              {initials.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
 
         {/* Overlay on hover */}
         <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -170,7 +205,7 @@ export const AvatarUpload: React.FC<AvatarUploadProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={handleDelete}
+            onClick={() => setShowDeleteDialog(true)}
             disabled={isUploading}
           >
             <X className="h-4 w-4 mr-2" />
@@ -180,8 +215,38 @@ export const AvatarUpload: React.FC<AvatarUploadProps> = ({
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
-        JPG, PNG or GIF. Max size 5MB.
+        JPG, PNG, GIF, or WEBP. Max size 5MB.
       </p>
     </div>
+
+    {/* Delete Confirmation Dialog */}
+    <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove Avatar?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to remove your profile picture? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isUploading}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDelete}
+            disabled={isUploading}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Removing...
+              </>
+            ) : (
+              'Remove'
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 };

@@ -15,6 +15,7 @@ interface ClientsState {
   searchTerm: string;
   activeOnly: boolean;
   selectedClient: Client | null;
+  recentClients: Client[];
 }
 
 interface ClientsActions {
@@ -29,9 +30,19 @@ interface ClientsActions {
   setSearchTerm: (term: string) => void;
   setActiveOnly: (activeOnly: boolean) => void;
   setSelectedClient: (client: Client | null) => void;
+  addRecentClient: (client: Client) => void;
+  removeRecentClient: (clientId: string) => void;
 
   // API actions
-  fetchClients: () => Promise<void>;
+  fetchClients: (filters?: {
+    status?: string;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+    page?: number;
+    limit?: number;
+    pending?: boolean;
+  }) => Promise<void>;
   fetchClient: (id: string) => Promise<Client>;
   createClient: (
     clientData: Omit<Client, "_id" | "createdAt" | "updatedAt">
@@ -73,6 +84,7 @@ export const useClientsStore = create<ClientsStore>()(
       searchTerm: "",
       activeOnly: false,
       selectedClient: null,
+      recentClients: [],
 
       // State management actions
       setClients: (clients) => set({ clients }),
@@ -99,23 +111,59 @@ export const useClientsStore = create<ClientsStore>()(
       clearError: () => set({ error: null }),
       setSearchTerm: (searchTerm) => set({ searchTerm }),
       setActiveOnly: (activeOnly) => set({ activeOnly }),
-      setSelectedClient: (selectedClient) => set({ selectedClient }),
+      setSelectedClient: (selectedClient) => {
+        if (selectedClient) {
+          // Add to recent clients if not already present
+          const exists = get().recentClients.some(
+            (c) => c._id === selectedClient._id
+          );
+          if (!exists) {
+            set((state) => ({
+              recentClients: [selectedClient, ...state.recentClients].slice(
+                0,
+                5
+              ), // Keep only 5 most recent
+            }));
+          }
+        }
+        set({ selectedClient });
+      },
+
+      addRecentClient: (client) => {
+        set((state) => ({
+          recentClients: [
+            client,
+            ...state.recentClients.filter((c) => c._id !== client._id),
+          ].slice(0, 5),
+        }));
+      },
+
+      removeRecentClient: (clientId) => {
+        set((state) => ({
+          recentClients: state.recentClients.filter((c) => c._id !== clientId),
+        }));
+      },
 
       // API actions
-      fetchClients: async () => {
+      fetchClients: async (filters?: {
+        status?: string;
+        search?: string;
+        sortBy?: string;
+        sortOrder?: "asc" | "desc";
+        page?: number;
+        limit?: number;
+        pending?: boolean;
+      }) => {
         set({ loading: true, error: null });
         try {
-          const response = await apiClient.get("/clients");
-          console.log('Clients API response:', response);
-          console.log('Clients data:', response.data);
-          console.log('Response data structure:', JSON.stringify(response.data, null, 2));
-          const clientsData = response.data.data?.clients || response.data.clients || response.data.data || response.data;
-          console.log('Extracted clients data:', clientsData);
-          console.log('Is clients data an array?', Array.isArray(clientsData));
-          if (Array.isArray(clientsData) && clientsData.length > 0) {
-            console.log('First client structure:', JSON.stringify(clientsData[0], null, 2));
-          }
-          set({ clients: clientsData, loading: false });
+          // Import clientsService dynamically to avoid circular dependency
+          const { clientsService } = await import(
+            "../../services/api/clientsService"
+          );
+
+          const result = await clientsService.getClients(filters);
+
+          set({ clients: result.clients, loading: false });
         } catch (error) {
           set({
             error:
@@ -130,8 +178,19 @@ export const useClientsStore = create<ClientsStore>()(
       fetchClient: async (id: string) => {
         try {
           const response = await apiClient.get(`/clients/${id}`);
-          return response.data.data.client || response.data.data || response.data;
+          const data = response.data.data || response.data;
+          const clientData = data.client || data;
+
+          // Merge subscription data if available (this contains the real-time status)
+          if (data.subscription) {
+            clientData.subscription = data.subscription;
+          }
+
+          if (clientData.services?.[0]) {
+          }
+          return clientData;
         } catch (error) {
+          console.error("fetchClient error:", error);
           set({
             error:
               error instanceof Error ? error.message : "Failed to fetch client",
@@ -166,20 +225,22 @@ export const useClientsStore = create<ClientsStore>()(
         set({ loading: true, error: null });
         try {
           const response = await apiClient.patch(`/clients/${id}`, updates);
-          console.log('Update client API response:', response);
-          console.log('Update client response data:', response.data);
-          
+
           // Handle different response formats
-          let updatedClient = response.data.data?.client || response.data.client || response.data.data || response.data;
-          let subscriber = response.data.data?.subscriber || response.data.subscriber;
-          
+          const updatedClient =
+            response.data.data?.client ||
+            response.data.client ||
+            response.data.data ||
+            response.data;
+          const subscriber =
+            response.data.data?.subscriber || response.data.subscriber;
+
           // If response contains the full updated client object
-          if (updatedClient && typeof updatedClient === 'object') {
-            console.log('Updated client structure:', JSON.stringify(updatedClient, null, 2));
+          if (updatedClient && typeof updatedClient === "object") {
             if (subscriber) {
-              console.log('Subscriber data:', JSON.stringify(subscriber, null, 2));
               // Update subscriber store
-              const { updateSubscriber, addSubscriber } = useSubscribersStore.getState();
+              const { updateSubscriber, addSubscriber } =
+                useSubscribersStore.getState();
               if (subscriber._id) {
                 updateSubscriber(subscriber._id, subscriber);
               } else {
@@ -189,14 +250,13 @@ export const useClientsStore = create<ClientsStore>()(
             get().updateClient(id, updatedClient);
           } else {
             // If response doesn't contain the client, just refetch all clients
-            console.log('Response format unexpected, refetching clients...');
             await get().fetchClients();
           }
-          
+
           set({ loading: false });
           return updatedClient;
         } catch (error) {
-          console.error('Update client error:', error);
+          console.error("Update client error:", error);
           set({
             error:
               error instanceof Error
@@ -211,8 +271,35 @@ export const useClientsStore = create<ClientsStore>()(
       deleteClient: async (id) => {
         set({ loading: true, error: null });
         try {
+          // Get the client before deletion to find associated subscriber
+          const client = get().clients.find((c) => c._id === id);
+
+          // Delete the client from the API
           await apiClient.delete(`/clients/${id}`);
+
+          // Remove client from store
           get().removeClient(id);
+
+          // Also remove the associated subscriber if exists
+          if (client && client.user) {
+            const userId =
+              typeof client.user === "string" ? client.user : client.user._id;
+            const { subscribers, removeSubscriber } =
+              useSubscribersStore.getState();
+
+            // Find subscriber with matching user ID
+            const subscriberToRemove = subscribers.find((sub) => {
+              const subUserId =
+                typeof sub.user === "string" ? sub.user : sub.user._id;
+              return subUserId === userId;
+            });
+
+            // Remove subscriber if found
+            if (subscriberToRemove) {
+              removeSubscriber(subscriberToRemove._id);
+            }
+          }
+
           set({ loading: false });
         } catch (error) {
           set({
@@ -309,9 +396,13 @@ export const useClientsStore = create<ClientsStore>()(
             client.businessLocation?.state
               ?.toLowerCase()
               .includes(searchTerm.toLowerCase()) ||
-            (typeof client.user === 'object' && client.user?.email && client.user.email.toLowerCase().includes(searchTerm.toLowerCase()));
+            (typeof client.user === "object" &&
+              client.user?.email &&
+              client.user.email
+                .toLowerCase()
+                .includes(searchTerm.toLowerCase()));
           // Default to true if isActive is undefined (for backward compatibility)
-          const matchesActive = !activeOnly || (client.isActive !== false);
+          const matchesActive = !activeOnly || client.isActive !== false;
           return matchesSearch && matchesActive;
         });
       },
@@ -324,6 +415,7 @@ export const useClientsStore = create<ClientsStore>()(
         clients: state.clients,
         searchTerm: state.searchTerm,
         activeOnly: state.activeOnly,
+        recentClients: state.recentClients,
       }),
     }
   )

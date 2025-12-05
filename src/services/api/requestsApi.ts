@@ -1,4 +1,4 @@
-import { apiClient } from '../lib/apiClient';
+import { apiClient } from './apiClient';
 import type { Request, RequestFilters, RequestsResponse } from '../types/request.types';
 
 export const requestsApi = {
@@ -38,7 +38,7 @@ export const requestsApi = {
     return response.data.data;
   },
 
-  async updateRequest(id: string, data: { notes?: string; adminNotes?: string }): Promise<Request> {
+  async updateRequest(id: string, data: { notes?: string; adminNotes?: string; requestedItemId?: string }): Promise<Request> {
     const response = await apiClient.patch<{ status: string; data: Request }>(
       `/requests/${id}`,
       data

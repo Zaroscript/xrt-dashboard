@@ -108,7 +108,7 @@ export const useClientsData = () => {
     return totalRevenue / clients.length;
   }, [totalRevenue, clients]);
   const handleClientUpdate = (updatedClient: Client) => {
-    console.log('Client updated:', updatedClient);
+    // Handle client update logic
   };
 
   // Additional states and handlers for Clients.tsx compatibility
@@ -147,7 +147,6 @@ export const useClientsData = () => {
     setIsExporting(true);
     try {
       // Export logic here
-      console.log('Exporting clients...');
     } catch (error) {
       console.error('Error exporting clients:', error);
       setErrorMessage('Failed to export clients');
@@ -170,7 +169,6 @@ export const useClientsData = () => {
   const onApproveUser = async (userId: string) => {
     try {
       // Approve user logic here
-      console.log('Approving user:', userId);
     } catch (error) {
       console.error('Error approving user:', error);
     }
@@ -179,7 +177,6 @@ export const useClientsData = () => {
   const onRejectUser = async (userId: string) => {
     try {
       // Reject user logic here
-      console.log('Rejecting user:', userId);
     } catch (error) {
       console.error('Error rejecting user:', error);
     }

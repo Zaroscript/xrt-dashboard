@@ -52,7 +52,7 @@ export const exportDashboardData = (
     return lines.join('\n');
   };
 
-  // Prepare summary data
+  // Let's get the summary stats ready for export
   const summary = [{
     totalUsers: stats.totalUsers || 0,
     activeUsers: stats.activeUsers || 0,
@@ -62,7 +62,7 @@ export const exportDashboardData = (
     portfolioProjects: stats.portfolioProjects || 0,
   }];
 
-  // Prepare activities data
+  // Format the activity data so it looks nice in the CSV
   const formattedActivities = activities.map(activity => ({
     id: activity.id,
     type: activity.type,
@@ -71,10 +71,10 @@ export const exportDashboardData = (
     user: activity.user || 'System'
   }));
 
-  // Generate CSV content
+  // Build the final CSV with both sections
   const csv = `Summary\n${toCSV(summary)}\n\nRecentActivities\n${toCSV(formattedActivities)}\n`;
   
-  // Create and trigger download
+  // Start the file download for the user
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

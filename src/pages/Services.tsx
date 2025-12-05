@@ -8,6 +8,9 @@ import {
   ArrowUpDown,
   List,
   Grid,
+  Calendar,
+  Filter,
+  X,
 } from "lucide-react";
 import {
   Select,
@@ -25,7 +28,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -36,15 +39,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,126 +50,61 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { useServicesStore } from "@/stores/services/useServicesStore";
 import { useServiceRequestsStore } from "@/stores/service-requests/useServiceRequestsStore";
-import { Service } from "@/types/service.types";
+import { EditRequestDialog } from "@/components/requests/EditRequestDialog";
+import { requestsApi } from "@/services/api/requestsApi";
+import {
+  Service,
+  ServiceFormData,
+} from "@/types/service.types";
 import { useCanModify } from "@/hooks/useRole";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { format } from "date-fns";
-
-// Define types for feature and process items
-interface FeatureItem {
-  id?: string;
-  title: string;
-  description?: string;
-}
-
-interface ProcessItem {
-  id?: string;
-  title: string;
-  description?: string;
-}
-
-// Define the form data type that matches our UI and Service type
-interface ServiceFormData {
-  _id?: string;
-  name: string;
-  description: string;
-  category: string;
-  basePrice: number;
-  status: "active" | "inactive";
-  features: (string | FeatureItem)[];
-  process: (string | ProcessItem)[];
-  discount: {
-    amount: number;
-    isActive: boolean;
-    startDate?: Date;
-    endDate?: Date;
-    code?: string;
-  };
-  discountedPrice: number;
-  currentPrice?: number;
-}
-
-// Helper function to get display text from a feature or process item
-const getItemDisplayText = (
-  item: string | { title?: string; description?: string },
-  index: number
-): string => {
-  if (typeof item === "string") return item;
-  return item.title || item.description || `Item ${index + 1}`;
-};
+import { ServiceFormDialog } from "@/components/services/ServiceFormDialog";
 
 export default function Services() {
-  // Get services and related state from the store
-  const services = useServicesStore((state) => state.services) || [];
-  const loading = useServicesStore((state) => state.loading);
-  const error = useServicesStore((state) => state.error);
-  const searchTerm = useServicesStore((state) => state.searchTerm);
-  const activeOnly = useServicesStore((state) => state.activeOnly);
+  const {
+    services,
+    loading,
+    fetchServices,
+    createService,
+    deleteService,
+    fetchService,
+    updateServiceApi,
+    toggleServiceStatus,
+  } = useServicesStore();
 
-  // Get store actions
-  const fetchServices = useServicesStore((state) => state.fetchServices);
-  const fetchService = useServicesStore((state) => state.fetchService);
-  const createService = useServicesStore((state) => state.createService);
-  const updateServiceApi = useServicesStore((state) => state.updateServiceApi);
-  const deleteService = useServicesStore((state) => state.deleteService);
-  const toggleServiceStatus = useServicesStore(
-    (state) => state.toggleServiceStatus
-  );
-  const setSearchTerm = useServicesStore((state) => state.setSearchTerm);
-  const setActiveOnly = useServicesStore((state) => state.setActiveOnly);
+  const {
+    serviceRequests,
+    fetchServiceRequests,
+    approveRequest,
+    rejectRequest,
+  } = useServiceRequestsStore();
 
   const { toast } = useToast();
   const canModify = useCanModify();
 
-  // Service Requests
-  const serviceRequests = useServiceRequestsStore(
-    (state) => state.serviceRequests
-  );
-  const fetchServiceRequests = useServiceRequestsStore(
-    (state) => state.fetchServiceRequests
-  );
-  const approveRequest = useServiceRequestsStore(
-    (state) => state.approveRequest
-  );
-  const rejectRequest = useServiceRequestsStore((state) => state.rejectRequest);
-
-  // Load services on component mount
-  useEffect(() => {
-    const loadServices = async () => {
-      try {
-        await fetchServices();
-        await fetchServiceRequests();
-      } catch (error) {
-        console.error("Failed to load services:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load services. Please try again.",
-          variant: "destructive",
-        });
-      }
-    };
-
-    loadServices();
-  }, [fetchServices, fetchServiceRequests, toast]);
-
-  // Show error toast when error state changes
-  useEffect(() => {
-    if (error) {
-      toast({
-        title: "Error",
-        description: error,
-        variant: "destructive",
-      });
-    }
-  }, [error, toast]);
-
-  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all"); // Changed from activeOnly to statusFilter
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [priceRange, setPriceRange] = useState<{ min: number; max: number }>({ min: 0, max: 10000 });
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+  const [isOpen, setIsOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentServiceId, setCurrentServiceId] = useState<string | null>(null);
+  
+  // State for edit request dialog
+  const [isEditRequestDialogOpen, setIsEditRequestDialogOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+
+  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [sortConfig, setSortConfig] = useState<{
@@ -185,82 +115,38 @@ export default function Services() {
     direction: "asc",
   });
 
-  const [isOpen, setIsOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentServiceId, setCurrentServiceId] = useState<string | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  // Form data state for the dialog
+  const [formData, setFormData] = useState<ServiceFormData | undefined>(
+    undefined
+  );
 
-  const [formData, setFormData] = useState<ServiceFormData>({
-    name: "",
-    description: "",
-    category: "",
-    basePrice: 0,
-    status: "active",
-    features: [],
-    process: [],
-    discount: {
-      amount: 0,
-      isActive: false,
-    },
-    discountedPrice: 0,
-    currentPrice: 0,
-  });
+  useEffect(() => {
+    fetchServices();
+    fetchServiceRequests();
+  }, [fetchServices, fetchServiceRequests]);
 
-  const [newIncludedItem, setNewIncludedItem] = useState({
-    title: "",
-    description: "",
-  });
-
-  const [newProcessItem, setNewProcessItem] = useState({
-    title: "",
-    description: "",
-  });
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Validation
-    if (formData.name.length < 3) {
-      toast({
-        title: "Validation Error",
-        description: "Service name must be at least 3 characters long",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (formData.description.length < 10) {
-      toast({
-        title: "Validation Error",
-        description: "Description must be at least 10 characters long",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const handleSubmit = async (data: ServiceFormData) => {
     setIsSubmitting(true);
 
     let serviceData: any;
     try {
       serviceData = {
-        ...formData,
-        features: formData.features.map((feature) =>
+        ...data,
+        features: data.features.map((feature) =>
           typeof feature === "string" ? feature : feature.title
         ),
-        process: formData.process.map((process) =>
+        process: data.process.map((process) =>
           typeof process === "string" ? process : process.title
         ),
-        isActive: formData.status === "active",
+        isActive: data.status === "active",
         discount: {
-          amount: formData.discount.amount,
-          isActive: formData.discount.isActive,
-          startDate: formData.discount.startDate,
-          endDate: formData.discount.endDate,
-          code: formData.discount.code,
+          amount: data.discount.amount,
+          isActive: data.discount.isActive,
+          startDate: data.discount.startDate,
+          endDate: data.discount.endDate,
+          code: data.discount.code,
         },
-        basePrice: formData.basePrice,
+        basePrice: data.basePrice,
       };
 
       // Remove fields that are calculated server-side
@@ -289,8 +175,8 @@ export default function Services() {
         });
       }
 
-      resetForm();
       setIsOpen(false);
+      resetForm();
     } catch (error: any) {
       console.error("Error saving service:", error);
       toast({
@@ -306,21 +192,7 @@ export default function Services() {
   };
 
   const resetForm = () => {
-    setFormData({
-      name: "",
-      description: "",
-      category: "",
-      basePrice: 0,
-      status: "active",
-      features: [],
-      process: [],
-      discount: {
-        amount: 0,
-        isActive: false,
-      },
-      discountedPrice: 0,
-      currentPrice: 0,
-    });
+    setFormData(undefined);
     setIsEditing(false);
     setCurrentServiceId(null);
   };
@@ -329,10 +201,9 @@ export default function Services() {
     try {
       setIsSubmitting(true);
       const serviceDetails = await fetchService(service._id);
-      console.log("Service details from API:", serviceDetails);
 
       // Transform the service data to match the form structure
-      const formData: ServiceFormData = {
+      const newFormData: ServiceFormData = {
         ...serviceDetails,
         status: serviceDetails.isActive ? "active" : "inactive",
         discount: {
@@ -343,8 +214,7 @@ export default function Services() {
         process: serviceDetails.process || [],
       };
 
-      console.log("Setting form data:", formData);
-      setFormData(formData);
+      setFormData(newFormData);
       setCurrentServiceId(serviceDetails._id);
       setIsEditing(true);
       setIsOpen(true);
@@ -392,13 +262,30 @@ export default function Services() {
   const handleToggleStatus = async (id: string) => {
     try {
       await toggleServiceStatus(id);
+      toast({
+        title: "Success",
+        description: "Service status updated successfully",
+      });
     } catch (error) {
       console.error("Error toggling service status:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to toggle service status",
+        variant: "destructive",
+      });
     }
   };
 
   // Sort services
   const sortedAndFilteredServices = React.useMemo(() => {
+    // Get unique categories
+    const categories = Array.isArray(services) 
+      ? [...new Set(services.map(s => s.category).filter(Boolean))]
+      : [];
+
     // Filter services
     const filtered = Array.isArray(services)
       ? services.filter((service) => {
@@ -409,8 +296,23 @@ export default function Services() {
               ?.toLowerCase()
               .includes(searchTerm.toLowerCase()) ||
             service.category?.toLowerCase().includes(searchTerm.toLowerCase());
-          const matchesStatus = !activeOnly || service.isActive;
-          return matchesSearch && matchesStatus;
+          
+          const matchesStatus = 
+            statusFilter === "all" || 
+            (statusFilter === "active" && service.isActive) || 
+            (statusFilter === "inactive" && !service.isActive);
+          
+          const matchesCategory = selectedCategory === "all" || service.category === selectedCategory;
+          
+          const matchesPrice = 
+            service.basePrice >= priceRange.min && 
+            service.basePrice <= priceRange.max;
+          
+          const matchesDate = 
+            (!dateRange.start || new Date(service.createdAt) >= new Date(dateRange.start)) &&
+            (!dateRange.end || new Date(service.createdAt) <= new Date(dateRange.end));
+          
+          return matchesSearch && matchesStatus && matchesCategory && matchesPrice && matchesDate;
         })
       : [];
 
@@ -424,7 +326,36 @@ export default function Services() {
       }
       return 0;
     });
-  }, [services, searchTerm, activeOnly, sortConfig]);
+  }, [services, searchTerm, statusFilter, selectedCategory, priceRange, dateRange, sortConfig]);
+
+  // Get unique categories for filter dropdown
+  const categories = React.useMemo(() => {
+    if (!Array.isArray(services)) return [];
+    return [...new Set(services.map(s => s.category).filter(Boolean))].sort();
+  }, [services]);
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setSelectedCategory("all");
+    setPriceRange({ min: 0, max: 10000 });
+    setDateRange({ start: "", end: "" });
+    setCurrentPage(1);
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters = React.useMemo(() => {
+    return (
+      searchTerm !== "" ||
+      statusFilter !== "all" ||
+      selectedCategory !== "all" ||
+      priceRange.min > 0 ||
+      priceRange.max < 10000 ||
+      dateRange.start !== "" ||
+      dateRange.end !== ""
+    );
+  }, [searchTerm, statusFilter, selectedCategory, priceRange, dateRange]);
 
   // Pagination
   const totalPages = Math.ceil(sortedAndFilteredServices.length / itemsPerPage);
@@ -463,77 +394,6 @@ export default function Services() {
     </TableHead>
   );
 
-  const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
-  ) => {
-    const { name, value, type } = e.target;
-
-    setFormData((prev) => {
-      if (name === "isActive") {
-        return {
-          ...prev,
-          [name]: value === "true" || value === "active",
-        };
-      }
-
-      if (
-        type === "number" ||
-        name === "basePrice" ||
-        name === "amount" ||
-        name === "discountedPrice" ||
-        name === "currentPrice"
-      ) {
-        return {
-          ...prev,
-          [name]: value === "" ? "" : parseFloat(value),
-        };
-      }
-
-      return {
-        ...prev,
-        [name]: value,
-      };
-    });
-  };
-
-  const addIncludedItem = () => {
-    if (!newIncludedItem.title.trim()) return;
-
-    setFormData((prev) => ({
-      ...prev,
-      features: [...prev.features, newIncludedItem.title],
-    }));
-
-    setNewIncludedItem({ title: "", description: "" });
-  };
-
-  const addProcessItem = () => {
-    if (!newProcessItem.title.trim()) return;
-
-    setFormData((prev) => ({
-      ...prev,
-      process: [...prev.process, newProcessItem.title],
-    }));
-
-    setNewProcessItem({ title: "", description: "" });
-  };
-
-  const removeIncludedItem = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      features: prev.features.filter((_, i) => i !== index),
-    }));
-  };
-
-  const removeProcessItem = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      process: prev.process.filter((_, i) => i !== index),
-    }));
-  };
-
   const getStatusBadge = (isActive: boolean) => {
     return isActive ? (
       <Badge className="bg-green-500">Active</Badge>
@@ -571,362 +431,17 @@ export default function Services() {
             </Button>
           </div>
         </div>
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col">
-            <DialogHeader className="flex-shrink-0">
-              <DialogTitle className="text-2xl font-bold">
-                Create New Service
-              </DialogTitle>
-              <DialogDescription className="text-muted-foreground">
-                Fill in the service details below. All fields are required
-                unless marked as optional.
-              </DialogDescription>
-            </DialogHeader>
-            <form
-              onSubmit={handleSubmit}
-              className="flex-1 flex flex-col min-h-0"
-            >
-              <div className="space-y-6 py-2 overflow-y-auto pr-2 -mr-2">
-                {/* Basic Information Section */}
-                <div className="space-y-4 p-4 bg-muted/20 rounded-lg">
-                  <div className="space-y-2">
-                    <h3 className="font-medium">Basic Information</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Enter the basic details of your service.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Service Name *</Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, name: e.target.value })
-                        }
-                        placeholder="e.g., Web Development"
-                        required
-                        disabled={isSubmitting}
-                        className="bg-background"
-                      />
-                    </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="category">Category *</Label>
-                      <Input
-                        id="category"
-                        value={formData.category}
-                        onChange={(e) =>
-                          setFormData({ ...formData, category: e.target.value })
-                        }
-                        placeholder="e.g., Web Development, Design"
-                        required
-                        disabled={isSubmitting}
-                        className="bg-background"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="basePrice">Price ($) *</Label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                          $
-                        </span>
-                        <Input
-                          id="basePrice"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={formData.basePrice}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              basePrice: Number(e.target.value),
-                            })
-                          }
-                          placeholder="0.00"
-                          required
-                          disabled={isSubmitting}
-                          className="pl-8 bg-background"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Status *</Label>
-                      <div className="flex items-center space-x-2">
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="sr-only peer"
-                            checked={formData.status === "active"}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                status: e.target.checked
-                                  ? "active"
-                                  : "inactive",
-                              })
-                            }
-                            disabled={isSubmitting}
-                          />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                          <span className="ml-3 text-sm font-medium text-gray-900">
-                            {formData.status === "active"
-                              ? "Active"
-                              : "Inactive"}
-                          </span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description *</Label>
-                    <Textarea
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          description: e.target.value,
-                        })
-                      }
-                      placeholder="Describe the service in detail. What makes it special? What problems does it solve?"
-                      rows={3}
-                      required
-                      disabled={isSubmitting}
-                      className="bg-background"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      A clear description helps clients understand your service
-                      better.
-                    </p>
-                  </div>
-                </div>
-
-                {/* What's Included Section */}
-                <div className="space-y-4 p-4 bg-muted/10 rounded-lg">
-                  <div className="space-y-2">
-                    <h3 className="font-medium">What's Included</h3>
-                    <p className="text-sm text-muted-foreground">
-                      List all features and benefits included in this service.
-                    </p>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-                      <div className="sm:col-span-2 space-y-1">
-                        <Label className="text-xs">Feature Title</Label>
-                        <Input
-                          placeholder="e.g., Responsive Design"
-                          value={newIncludedItem.title}
-                          onChange={(e) =>
-                            setNewIncludedItem((prev) => ({
-                              ...prev,
-                              title: e.target.value,
-                            }))
-                          }
-                          className="bg-background"
-                        />
-                      </div>
-                      <div className="sm:col-span-2 space-y-1">
-                        <Label className="text-xs">
-                          Description (Optional)
-                        </Label>
-                        <Input
-                          placeholder="e.g., Mobile-friendly design that works on all devices"
-                          value={newIncludedItem.description}
-                          onChange={(e) =>
-                            setNewIncludedItem((prev) => ({
-                              ...prev,
-                              description: e.target.value,
-                            }))
-                          }
-                          onKeyDown={(e) =>
-                            e.key === "Enter" && addIncludedItem()
-                          }
-                          className="bg-background"
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={addIncludedItem}
-                          disabled={!newIncludedItem.title.trim()}
-                          className="w-full sm:w-auto"
-                        >
-                          Add Feature
-                        </Button>
-                      </div>
-                    </div>
-
-                    {formData.features.length > 0 && (
-                      <div className="space-y-2 mt-3">
-                        <div className="text-sm font-medium">
-                          Included Features ({formData.features.length})
-                        </div>
-                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                          {formData.features.map((item, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center justify-between p-2 bg-background rounded-md"
-                            >
-                              <div>
-                                <p className="text-sm font-medium">
-                                  {getItemDisplayText(item, index)}
-                                </p>
-                                {typeof item !== "string" &&
-                                  item.description && (
-                                    <p className="text-xs text-muted-foreground">
-                                      {item.description}
-                                    </p>
-                                  )}
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeIncludedItem(index)}
-                                className="text-destructive hover:text-destructive/80"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Process Steps Section */}
-                <div className="space-y-4 p-4 bg-muted/10 rounded-lg">
-                  <div className="space-y-2">
-                    <h3 className="font-medium">Our Process</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Outline the steps involved in delivering this service.
-                    </p>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-                      <div className="sm:col-span-2 space-y-1">
-                        <Label className="text-xs">Step Title</Label>
-                        <Input
-                          placeholder="e.g., Initial Consultation"
-                          value={newProcessItem.title}
-                          onChange={(e) =>
-                            setNewProcessItem((prev) => ({
-                              ...prev,
-                              title: e.target.value,
-                            }))
-                          }
-                          className="bg-background"
-                        />
-                      </div>
-                      <div className="sm:col-span-2 space-y-1">
-                        <Label className="text-xs">
-                          Description (Optional)
-                        </Label>
-                        <Input
-                          placeholder="e.g., 30-minute call to discuss requirements"
-                          value={newProcessItem.description}
-                          onChange={(e) =>
-                            setNewProcessItem((prev) => ({
-                              ...prev,
-                              description: e.target.value,
-                            }))
-                          }
-                          onKeyDown={(e) =>
-                            e.key === "Enter" && addProcessItem()
-                          }
-                          className="bg-background"
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={addProcessItem}
-                          disabled={!newProcessItem.title.trim()}
-                          className="w-full sm:w-auto"
-                        >
-                          Add Step
-                        </Button>
-                      </div>
-                    </div>
-
-                    {formData.process.length > 0 && (
-                      <div className="space-y-2 mt-3">
-                        <div className="text-sm font-medium">
-                          Process Steps ({formData.process.length})
-                        </div>
-                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                          {formData.process.map((step, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center justify-between p-2 bg-background rounded-md"
-                            >
-                              <div>
-                                <p className="text-sm font-medium">
-                                  {typeof step === "string"
-                                    ? step
-                                    : step.title ||
-                                      step.description ||
-                                      `Step ${index + 1}`}
-                                </p>
-                                {typeof step === "object" &&
-                                  step.description && (
-                                    <p className="text-xs text-muted-foreground">
-                                      {step.description}
-                                    </p>
-                                  )}
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeProcessItem(index)}
-                                className="text-destructive hover:text-destructive/80"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <DialogFooter className="flex-shrink-0 pt-4 border-t mt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsOpen(false);
-                    resetForm();
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {isEditing ? "Updating..." : "Creating..."}
-                    </>
-                  ) : isEditing ? (
-                    "Update Service"
-                  ) : (
-                    "Create Service"
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <ServiceFormDialog
+          open={isOpen}
+          onOpenChange={(open) => {
+            setIsOpen(open);
+            if (!open) resetForm();
+          }}
+          initialData={formData}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+        />
       </div>
 
       <Card>
@@ -937,24 +452,47 @@ export default function Services() {
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search services by name, description, or category..."
-                  className="pl-10 w-full md:w-96"
+                  className="pl-10 w-full md:w-96 bg-background border-border/50 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
-                    setCurrentPage(1); // Reset to first page on search
+                    setCurrentPage(1);
                   }}
                 />
               </div>
             </div>
             <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className="border-border/50 hover:bg-accent/50 transition-colors duration-200"
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                Advanced Filters
+                {hasActiveFilters && (
+                  <span className="ml-2 h-2 w-2 bg-primary rounded-full" />
+                )}
+              </Button>
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="text-muted-foreground hover:text-foreground transition-colors duration-200"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Clear All
+                </Button>
+              )}
               <Select
-                value={activeOnly ? "active" : "all"}
+                value={statusFilter}
                 onValueChange={(value) => {
-                  setActiveOnly(value === "active");
+                  setStatusFilter(value);
                   setCurrentPage(1);
                 }}
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[140px] border-border/50">
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
                 <SelectContent>
@@ -970,23 +508,23 @@ export default function Services() {
                   setCurrentPage(1);
                 }}
               >
-                <SelectTrigger className="w-[120px]">
+                <SelectTrigger className="w-[100px] border-border/50">
                   <SelectValue placeholder="Per page" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="5">5 per page</SelectItem>
-                  <SelectItem value="10">10 per page</SelectItem>
-                  <SelectItem value="20">20 per page</SelectItem>
-                  <SelectItem value="50">50 per page</SelectItem>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
                 </SelectContent>
               </Select>
               {canModify && (
                 <Button
                   onClick={() => {
-                    setIsOpen(true);
                     resetForm();
+                    setIsOpen(true);
                   }}
-                  className="bg-primary hover:bg-primary/90"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground transition-colors duration-200"
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Add Service
@@ -995,6 +533,95 @@ export default function Services() {
             </div>
           </div>
         </CardHeader>
+
+        {/* Advanced Filters */}
+        {showAdvancedFilters && (
+          <div className="px-6 pb-4">
+            <div className="p-4 bg-muted/30 border border-border/50 rounded-lg space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3  gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-foreground">Category</Label>
+                  <Select
+                    value={selectedCategory}
+                    onValueChange={(value) => {
+                      setSelectedCategory(value);
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="border-border/50">
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-foreground">Min Price</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={priceRange.min}
+                    onChange={(e) => {
+                      setPriceRange(prev => ({ ...prev, min: Number(e.target.value) || 0 }));
+                      setCurrentPage(1);
+                    }}
+                    placeholder="0"
+                    className="bg-background border-border/50 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-foreground">Max Price</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={priceRange.max}
+                    onChange={(e) => {
+                      setPriceRange(prev => ({ ...prev, max: Number(e.target.value) || 10000 }));
+                      setCurrentPage(1);
+                    }}
+                    placeholder="10000"
+                    className="bg-background border-border/50 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-foreground">Date Range</Label>
+                  <div className="flex space-x-2">
+                    <Input
+                      type="date"
+                      value={dateRange.start}
+                      onChange={(e) => {
+                        setDateRange(prev => ({ ...prev, start: e.target.value }));
+                        setCurrentPage(1);
+                      }}
+                      className="bg-background border-border/50 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
+                    />
+                    <Input
+                      type="date"
+                      value={dateRange.end}
+                      onChange={(e) => {
+                        setDateRange(prev => ({ ...prev, end: e.target.value }));
+                        setCurrentPage(1);
+                      }}
+                      className="bg-background border-border/50 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center items-center h-64">
@@ -1003,24 +630,32 @@ export default function Services() {
           ) : sortedAndFilteredServices.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-muted-foreground mb-4">
-                {searchTerm || activeOnly
+                {hasActiveFilters
                   ? "No services match your filters."
                   : "No services found. Create your first service to get started."}
               </p>
               <Button
                 onClick={() => {
-                  setSearchTerm("");
-                  setFilterStatus("");
-                  setActiveOnly(false);
-                  resetForm();
-                  setIsOpen(true);
+                  if (hasActiveFilters) {
+                    clearAllFilters();
+                  } else {
+                    resetForm();
+                    setIsOpen(true);
+                  }
                 }}
                 className="mt-2"
               >
-                <Plus className="mr-2 h-4 w-4" />
-                {searchTerm || activeOnly
-                  ? "Clear filters"
-                  : "Add Your First Service"}
+                {hasActiveFilters ? (
+                  <>
+                    <X className="mr-2 h-4 w-4" />
+                    Clear Filters
+                  </>
+                ) : (
+                  <>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Your First Service
+                  </>
+                )}
               </Button>
             </div>
           ) : (
@@ -1039,9 +674,10 @@ export default function Services() {
                       <SortableHeader columnKey="isActive">
                         Status
                       </SortableHeader>
-                      <TableHead>Included</TableHead>
-                      <TableHead>Process</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead>Created</TableHead>
+                      {canModify && (
+                        <TableHead className="text-right">Actions</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1049,75 +685,44 @@ export default function Services() {
                       <TableRow key={service._id}>
                         <TableCell className="font-medium">
                           {service.name}
-                        </TableCell>
-                        <TableCell>{service.category}</TableCell>
-                        <TableCell>
-                          ${service.basePrice?.toFixed(2) || "0.00"}
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(service.isActive)}
+                          {service.description && (
+                            <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                              {service.description}
+                            </p>
+                          )}
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            {service.features
-                              ?.slice(0, 2)
-                              .map((feature, index) => (
-                                <div
-                                  key={index}
-                                  className="text-xs line-clamp-1"
-                                >
-                                  {getItemDisplayText(feature, index)}
-                                </div>
-                              ))}
-                            {service.features?.length > 2 && (
-                              <div className="text-xs text-muted-foreground">
-                                +{service.features.length - 2} more
-                              </div>
-                            )}
-                            {(!service.features ||
-                              service.features.length === 0) && (
-                              <span className="text-xs text-muted-foreground">
-                                None
-                              </span>
-                            )}
+                          <Badge variant="secondary">{service.category}</Badge>
+                        </TableCell>
+                        <TableCell>${service.basePrice.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <div
+                            className="cursor-pointer"
+                            onClick={() =>
+                              canModify && handleToggleStatus(service._id)
+                            }
+                          >
+                            {getStatusBadge(service.isActive)}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            {service.process?.slice(0, 2).map((step, index) => (
-                              <div key={index} className="text-xs line-clamp-1">
-                                {getItemDisplayText(step, index)}
-                              </div>
-                            ))}
-                            {service.process?.length > 2 && (
-                              <div className="text-xs text-muted-foreground">
-                                +{service.process.length - 2} more
-                              </div>
-                            )}
-                            {(!service.process ||
-                              service.process.length === 0) && (
-                              <span className="text-xs text-muted-foreground">
-                                None
-                              </span>
-                            )}
-                          </div>
+                          {format(new Date(service.createdAt), "MMM d, yyyy")}
                         </TableCell>
                         {canModify && (
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
+                            <div className="flex justify-end space-x-2">
                               <Button
                                 variant="ghost"
-                                size="sm"
+                                size="icon"
                                 onClick={() => handleEditService(service)}
-                                className="h-8 w-8 p-0"
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                onClick={() => deleteService(service._id)}
-                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                size="icon"
+                                onClick={() => handleDeleteClick(service._id)}
+                                className="text-destructive hover:text-destructive/90"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -1129,96 +734,81 @@ export default function Services() {
                   </TableBody>
                 </Table>
               ) : (
-                <div className="grid gap-4 p-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
                   {currentServices.map((service) => (
-                    <Card key={service._id} className="overflow-hidden">
-                      <div className="p-4 space-y-3">
+                    <Card key={service._id} className="flex flex-col">
+                      <CardHeader>
                         <div className="flex justify-between items-start">
                           <div>
-                            <h3 className="font-semibold text-lg">
+                            <CardTitle className="text-xl">
                               {service.name}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
+                            </CardTitle>
+                            <CardDescription className="mt-1">
                               {service.category}
+                            </CardDescription>
+                          </div>
+                          <div
+                            className="cursor-pointer"
+                            onClick={() =>
+                              canModify && handleToggleStatus(service._id)
+                            }
+                          >
+                            {getStatusBadge(service.isActive)}
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="flex-1">
+                        <p className="text-sm text-muted-foreground mb-4 line-clamp-3">
+                          {service.description}
+                        </p>
+                        <div className="text-2xl font-bold">
+                          ${service.basePrice.toFixed(2)}
+                        </div>
+                        {service.features && service.features.length > 0 && (
+                          <div className="mt-4">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">
+                              Includes:
                             </p>
+                            <ul className="text-xs space-y-1">
+                              {service.features
+                                .slice(0, 3)
+                                .map((feature, i) => (
+                                  <li key={i} className="flex items-center">
+                                    <span className="mr-2">•</span>
+                                    {typeof feature === "string"
+                                      ? feature
+                                      : "Feature"}
+                                  </li>
+                                ))}
+                              {service.features.length > 3 && (
+                                <li className="text-muted-foreground pl-3">
+                                  +{service.features.length - 3} more
+                                </li>
+                              )}
+                            </ul>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <Badge
-                              variant={service.isActive ? "default" : "outline"}
-                            >
-                              {service.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                            <div className="font-bold">
-                              ${service.basePrice?.toFixed(2) || "0.00"}
-                            </div>
-                          </div>
-                        </div>
-
-                        {service.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-2">
-                            {service.description}
-                          </p>
                         )}
-
-                        <div className="space-y-2 pt-2">
-                          <h4 className="text-sm font-medium">Features</h4>
-                          <div className="space-y-1">
-                            {service.features
-                              ?.slice(0, 3)
-                              .map((feature, index) => (
-                                <div key={index} className="flex items-start">
-                                  <div className="flex-shrink-0 h-5 w-5 text-green-500">
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      viewBox="0 0 20 20"
-                                      fill="currentColor"
-                                    >
-                                      <path
-                                        fillRule="evenodd"
-                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                        clipRule="evenodd"
-                                      />
-                                    </svg>
-                                  </div>
-                                  <span className="ml-2 text-sm">
-                                    {getItemDisplayText(feature, index)}
-                                  </span>
-                                </div>
-                              ))}
-                            {service.features?.length > 3 && (
-                              <div className="text-xs text-muted-foreground mt-1">
-                                +{service.features.length - 3} more features
-                              </div>
-                            )}
-                            {(!service.features ||
-                              service.features.length === 0) && (
-                              <p className="text-xs text-muted-foreground">
-                                No features added
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="pt-2 flex justify-end space-x-2">
+                      </CardContent>
+                      {canModify && (
+                        <CardFooter className="flex justify-end space-x-2 border-t pt-4">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleEditService(service)}
                           >
-                            <Edit className="h-4 w-4 mr-2" />
+                            <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </Button>
                           <Button
-                            variant="outline"
+                            variant="destructive"
                             size="sm"
-                            onClick={() => deleteService(service._id)}
-                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteClick(service._id)}
                           >
-                            <Trash2 className="h-4 w-4 mr-2" />
+                            <Trash2 className="mr-2 h-4 w-4" />
                             Delete
                           </Button>
-                        </div>
-                      </div>
+                        </CardFooter>
+                      )}
                     </Card>
                   ))}
                 </div>
@@ -1321,7 +911,7 @@ export default function Services() {
         <CardContent>
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin" />
+              <LoadingSpinner />
             </div>
           ) : serviceRequests.length > 0 ? (
             <div className="space-y-4">
@@ -1349,9 +939,13 @@ export default function Services() {
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Requested by: {request.user?.fName}{" "}
-                          {request.user?.lName ||
+                          Requested by:{" "}
+                          {request.client?.companyName ||
+                            (request.user?.fName && request.user?.lName
+                              ? `${request.user.fName} ${request.user.lName}`
+                              : null) ||
                             request.user?.email ||
+                            request.client?.user?.email ||
                             "Unknown Client"}
                         </p>
                         {request.notes && (
@@ -1369,6 +963,18 @@ export default function Services() {
                       <div className="flex flex-shrink-0 gap-2 mt-4 md:mt-0">
                         {request.status === "pending" && canModify ? (
                           <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedRequest(request);
+                                setIsEditRequestDialogOpen(true);
+                              }}
+                              className="gap-2"
+                            >
+                              <Edit className="h-4 w-4" />
+                              Edit
+                            </Button>
                             <Button
                               variant="outline"
                               size="sm"
@@ -1468,6 +1074,33 @@ export default function Services() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <EditRequestDialog
+        request={selectedRequest}
+        isOpen={isEditRequestDialogOpen}
+        onClose={() => {
+          setIsEditRequestDialogOpen(false);
+          setSelectedRequest(null);
+        }}
+        onSave={async (id, data) => {
+          try {
+            await requestsApi.updateRequest(id, data);
+            toast({
+              title: "Success",
+              description: "Request updated successfully",
+            });
+            await fetchServiceRequests();
+          } catch (error: any) {
+            toast({
+              title: "Error",
+              description: error.response?.data?.message || "Failed to update request",
+              variant: "destructive",
+            });
+            throw error;
+          }
+        }}
+        services={services}
+      />
     </div>
   );
 }

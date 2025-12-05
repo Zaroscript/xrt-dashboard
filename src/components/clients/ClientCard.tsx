@@ -75,9 +75,10 @@ import { useMemo, useState, useEffect } from "react";
 import { clientsService } from "@/services/api/clientsService";
 import { useToast } from "@/components/ui/use-toast";
 import { Client } from "@/types/client.types";
+import { getAvatarUrl, getUserInitials } from "@/utils/avatarUtils";
 import { AssignSubscriptionDialog } from "./AssignSubscriptionDialog";
 import { AssignServiceDialog } from "./AssignServiceDialog";
-import { useClientStore } from "@/store/useClientStore";
+import { useClientsStore } from "@/stores/clients/useClientsStore";
 
 // Define the Service interface locally since we don't have the type
 export interface Service {
@@ -139,7 +140,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { setSelectedClient } = useClientStore();
+  const { setSelectedClient } = useClientsStore();
   const canModify = useCanModify();
 
   // Quick action states
@@ -278,15 +279,85 @@ const ClientCard: React.FC<ClientCardProps> = ({
       bg: "bg-rose-100 dark:bg-rose-900/30",
       text: "text-rose-800 dark:text-rose-300",
     },
+    Client: {
+      gradient: "from-slate-500 to-slate-600",
+      bg: "bg-slate-100 dark:bg-slate-800",
+      text: "text-slate-800 dark:text-slate-400",
+    },
+    Subscriber: {
+      gradient: "from-indigo-500 to-purple-600",
+      bg: "bg-indigo-100 dark:bg-indigo-900/30",
+      text: "text-indigo-800 dark:text-indigo-300",
+    },
   };
 
-  const planName =
-    typeof client.subscription?.plan === "string"
-      ? client.subscription.plan
-      : client.subscription?.plan?.name || "Basic";
-  const status = ((typeof client.user === "object" && client.user?.status) ||
-    client.status ||
-    "active") as keyof typeof statusConfig;
+  const planName = client.subscription?.plan ? "Subscriber" : "Client";
+
+  // Determine the real client status based on multiple factors
+  const determineStatus = (): keyof typeof statusConfig => {
+    const user = typeof client.user === "object" ? client.user : null;
+
+    // Priority 1: Check isApproved status FIRST (if false, user is pending)
+    if (user && user.isApproved === false) {
+      return "pending";
+    }
+
+    // Priority 2: Check user status if available
+    if (user?.status) {
+      const userStatus = user.status.toLowerCase();
+      if (userStatus === "pending") {
+        return "pending";
+      }
+      if (
+        userStatus === "active" ||
+        userStatus === "inactive" ||
+        userStatus === "suspended" ||
+        userStatus === "blocked"
+      ) {
+        return userStatus as keyof typeof statusConfig;
+      }
+    }
+
+    // Priority 3: Check client.status
+    if (client.status) {
+      const clientStatus = client.status.toLowerCase();
+      if (clientStatus === "pending") {
+        return "pending";
+      }
+      if (
+        clientStatus === "active" ||
+        clientStatus === "inactive" ||
+        clientStatus === "suspended" ||
+        clientStatus === "blocked"
+      ) {
+        return clientStatus as keyof typeof statusConfig;
+      }
+    }
+
+    // Priority 4: Check if client is inactive
+    if (client.isActive === false) {
+      return "inactive";
+    }
+
+    // Priority 5: Check if user is inactive
+    if (user && user.isActive === false) {
+      return "inactive";
+    }
+
+    // Only default to active if user is approved AND active
+    if (
+      user &&
+      user.isApproved === true &&
+      (client.isActive === true || client.isActive === undefined)
+    ) {
+      return "active";
+    }
+
+    // If we can't determine, default to pending (safer default for new registrations)
+    return "pending";
+  };
+
+  const status = determineStatus();
   const plan = planConfig[planName as keyof typeof planConfig] || {
     gradient: "from-gray-500 to-gray-600",
     bg: "bg-gray-100 dark:bg-gray-800",
@@ -533,18 +604,26 @@ const ClientCard: React.FC<ClientCardProps> = ({
                 <div className="relative">
                   <Avatar className="h-12 w-12 border-2 border-background group-hover:scale-105 transition-transform">
                     <AvatarImage
-                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${
-                        typeof client.user === "string"
-                          ? client.user
-                          : client.user?.email || client.companyName
-                      }`}
+                      src={
+                        typeof client.user === "object" && client.user?.avatar
+                          ? getAvatarUrl(client.user.avatar)
+                          : undefined
+                      }
                       alt={client.companyName}
                     />
                     <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-white font-medium">
-                      {client.companyName
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
+                      {typeof client.user === "object" &&
+                      client.user?.fName &&
+                      client.user?.lName
+                        ? getUserInitials(
+                            client.user.fName,
+                            client.user.lName,
+                            client.user.email
+                          )
+                        : client.companyName
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")}
                     </AvatarFallback>
                   </Avatar>
                   {(typeof client.subscription?.plan === "string"
@@ -565,7 +644,11 @@ const ClientCard: React.FC<ClientCardProps> = ({
                 <div>
                   <div className="flex items-center space-x-2">
                     <h3 className="font-semibold text-base">
-                      {client.companyName}
+                      {typeof client.user === "object" &&
+                      client.user?.fName &&
+                      client.user?.lName
+                        ? `${client.user.fName} ${client.user.lName}`
+                        : client.companyName}
                     </h3>
                   </div>
                   <div className="flex items-center mt-1 space-x-2">
@@ -613,7 +696,12 @@ const ClientCard: React.FC<ClientCardProps> = ({
                         onClick={() => setShowAssignDialog(true)}
                       >
                         <FileText className="mr-2 h-4 w-4" />
-                        <span>Assign & Edit Plan</span>
+                        <span>
+                          {client.currentPlan &&
+                          typeof client.currentPlan === "object"
+                            ? "Update Plan"
+                            : "Assign Plan"}
+                        </span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => setShowAssignServiceDialog(true)}
@@ -869,7 +957,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
                 onClick={() => setShowAssignDialog(true)}
               >
                 <FileText className="h-4 w-4 mr-2" />
-                Assign Plan
+                {client.currentPlan && typeof client.currentPlan === "object"
+                  ? "Update Plan"
+                  : "Assign Plan"}
               </Button>
             )}
           </CardFooter>
@@ -882,7 +972,13 @@ const ClientCard: React.FC<ClientCardProps> = ({
           <DialogHeader>
             <DialogTitle>Edit Client Plan</DialogTitle>
             <DialogDescription>
-              Update the subscription plan for {client.companyName}.
+              Update the subscription plan for{" "}
+              {typeof client.user === "object" &&
+              client.user?.fName &&
+              client.user?.lName
+                ? `${client.user.fName} ${client.user.lName}`
+                : client.companyName}
+              .
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1000,8 +1096,13 @@ const ClientCard: React.FC<ClientCardProps> = ({
           <DialogHeader>
             <DialogTitle>Are you sure?</DialogTitle>
             <DialogDescription>
-              This will permanently delete {client.companyName}'s account and
-              all associated data. This action cannot be undone.
+              This will permanently delete{" "}
+              {typeof client.user === "object" &&
+              client.user?.fName &&
+              client.user?.lName
+                ? `${client.user.fName} ${client.user.lName}'s`
+                : `${client.companyName}'s`}{" "}
+              account and all associated data. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

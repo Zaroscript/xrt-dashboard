@@ -9,8 +9,6 @@ import {
 } from "@/components/ui/select";
 import { ClientStatus } from "@/types/client.types";
 
-export type ClientTier = "basic" | "premium" | "enterprise" | "vip";
-
 interface ClientFiltersProps {
   searchTerm: string;
   onSearchChange: (value: string) => void;
@@ -18,8 +16,6 @@ interface ClientFiltersProps {
   onSortChange: (value: "name" | "revenue" | "date") => void;
   status: ClientStatus | "all";
   onStatusChange: (value: ClientStatus | "all") => void;
-  tier: ClientTier | "all";
-  onTierChange: (value: ClientTier | "all") => void;
 }
 
 // Define the status options for filtering
@@ -32,15 +28,6 @@ const statusOptions = [
   { value: "blocked", label: "Blocked", color: "bg-gray-800" },
 ];
 
-// Define the tier options for filtering
-const tierOptions = [
-  { value: "all", label: "All Tiers", color: "bg-gray-200" },
-  { value: "basic", label: "Basic", color: "bg-blue-500" },
-  { value: "premium", label: "Premium", color: "bg-purple-500" },
-  { value: "enterprise", label: "Enterprise", color: "bg-indigo-500" },
-  { value: "vip", label: "VIP", color: "bg-amber-500" },
-];
-
 export const ClientFilters = ({
   searchTerm,
   onSearchChange,
@@ -48,8 +35,6 @@ export const ClientFilters = ({
   onSortChange,
   status,
   onStatusChange,
-  tier,
-  onTierChange,
 }: ClientFiltersProps) => {
   return (
     <div className="flex flex-col lg:flex-row gap-4">
@@ -76,26 +61,6 @@ export const ClientFilters = ({
           </SelectTrigger>
           <SelectContent className="glass-card">
             {statusOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${option.color}`} />
-                  {option.label}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={tier}
-          onValueChange={(value) => onTierChange(value as ClientTier | "all")}
-        >
-          <SelectTrigger className="w-full sm:w-48 glass-card bg-background/50">
-            <Filter className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="Filter by Tier" />
-          </SelectTrigger>
-          <SelectContent className="glass-card">
-            {tierOptions.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 <div className="flex items-center gap-2">
                   <div className={`h-2 w-2 rounded-full ${option.color}`} />

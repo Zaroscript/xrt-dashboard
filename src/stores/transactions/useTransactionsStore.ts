@@ -63,7 +63,7 @@ export type TransactionsStore = TransactionsState & TransactionsActions;
 export const useTransactionsStore = create<TransactionsStore>()(
   persist(
     (set, get) => ({
-      // Initial state
+      // Starting values
       transactions: [],
       loading: false,
       error: null,
@@ -72,7 +72,7 @@ export const useTransactionsStore = create<TransactionsStore>()(
       dateFilter: {},
       selectedTransaction: null,
 
-      // State management actions
+      // Managing our local state
       setTransactions: (transactions) => set({ transactions }),
       
       addTransaction: (transaction) => 
@@ -100,7 +100,7 @@ export const useTransactionsStore = create<TransactionsStore>()(
       setDateFilter: (dateFilter) => set({ dateFilter }),
       setSelectedTransaction: (selectedTransaction) => set({ selectedTransaction }),
 
-      // API actions
+      // Talking to the API
       fetchTransactions: async () => {
         set({ loading: true, error: null });
         try {
@@ -201,7 +201,7 @@ export const useTransactionsStore = create<TransactionsStore>()(
         await get().updateTransactionApi(id, { status: 'disputed' });
       },
 
-      // Utility actions
+      // Handy helper functions
       getTransactionsByClient: (clientId: string) => {
         return get().transactions.filter(transaction => 
           typeof transaction.client === 'string' ? transaction.client === clientId : transaction.client._id === clientId

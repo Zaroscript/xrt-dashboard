@@ -32,3 +32,8 @@ export const uploadUserAvatar = async (userId: string, file: File): Promise<stri
 export const deleteMyAvatar = async (): Promise<void> => {
   await apiClient.delete('/auth/me/avatar');
 };
+
+// Delete avatar for a specific user (admin only)
+export const deleteUserAvatar = async (userId: string): Promise<void> => {
+  await apiClient.delete(`/auth/users/${userId}/avatar`);
+};

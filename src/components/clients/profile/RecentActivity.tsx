@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format } from "date-fns";
@@ -11,6 +11,7 @@ import {
   Activity,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import {
   useClientActivities,
@@ -19,6 +20,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface RecentActivityProps {
   clientId: string;
@@ -26,13 +28,19 @@ interface RecentActivityProps {
 
 export function RecentActivity({ clientId }: RecentActivityProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [isPaginating, setIsPaginating] = useState(false);
 
   const {
     data: activities = [],
     isLoading,
     error,
   } = useClientActivities(clientId);
+
+  // Reset current page when page size changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
 
   // Calculate pagination
   const totalPages = Math.ceil(activities.length / itemsPerPage);
@@ -41,11 +49,31 @@ export function RecentActivity({ clientId }: RecentActivityProps) {
   const currentActivities = activities.slice(startIndex, endIndex);
 
   const handlePreviousPage = () => {
-    setCurrentPage((prev) => Math.max(1, prev - 1));
+    if (currentPage > 1) {
+      setIsPaginating(true);
+      setTimeout(() => {
+        setCurrentPage((prev) => Math.max(1, prev - 1));
+        setIsPaginating(false);
+      }, 150);
+    }
   };
 
   const handleNextPage = () => {
-    setCurrentPage((prev) => Math.min(totalPages, prev + 1));
+    if (currentPage < totalPages) {
+      setIsPaginating(true);
+      setTimeout(() => {
+        setCurrentPage((prev) => Math.min(totalPages, prev + 1));
+        setIsPaginating(false);
+      }, 150);
+    }
+  };
+
+  const handlePageChange = (pageNumber: number) => {
+    setIsPaginating(true);
+    setTimeout(() => {
+      setCurrentPage(pageNumber);
+      setIsPaginating(false);
+    }, 150);
   };
 
   const getActivityIcon = (type: ActivityItem["type"]) => {
@@ -143,7 +171,34 @@ export function RecentActivity({ clientId }: RecentActivityProps) {
           </div>
         ) : (
           <>
-            <div className="space-y-2">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1}-{Math.min(endIndex, activities.length)} of {activities.length} activities
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Show:</span>
+                <Select value={itemsPerPage.toString()} onValueChange={(value) => setItemsPerPage(Number(value))}>
+                  <SelectTrigger className="w-16 h-6 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            {/* Loading overlay for pagination */}
+            {isPaginating && (
+              <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10 rounded-lg">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            )}
+            
+            <div className="space-y-2 relative">
               {currentActivities.map((activity) => (
                 <div
                   key={activity.id}
@@ -183,7 +238,7 @@ export function RecentActivity({ clientId }: RecentActivityProps) {
               ))}
             </div>
 
-            {/* Pagination Controls */}
+            {/* Enhanced Pagination Controls */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between pt-4 mt-4 border-t border-border">
                 <div className="text-sm text-muted-foreground">
@@ -194,21 +249,57 @@ export function RecentActivity({ clientId }: RecentActivityProps) {
                     variant="outline"
                     size="sm"
                     onClick={handlePreviousPage}
-                    disabled={currentPage === 1}
-                    className="h-8"
+                    disabled={currentPage === 1 || isPaginating}
+                    className="h-8 w-8 p-0"
                   >
-                    <ChevronLeft className="w-4 h-4 mr-1" />
-                    Previous
+                    {isPaginating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ChevronLeft className="w-4 h-4" />
+                    )}
                   </Button>
+                  
+                  {/* Page numbers */}
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                      let pageNumber;
+                      if (totalPages <= 5) {
+                        pageNumber = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNumber = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNumber = totalPages - 4 + i;
+                      } else {
+                        pageNumber = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNumber}
+                          variant={currentPage === pageNumber ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handlePageChange(pageNumber)}
+                          disabled={isPaginating}
+                          className="h-8 w-8 p-0"
+                        >
+                          {pageNumber}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleNextPage}
-                    disabled={currentPage === totalPages}
-                    className="h-8"
+                    disabled={currentPage === totalPages || isPaginating}
+                    className="h-8 w-8 p-0"
                   >
-                    Next
-                    <ChevronRight className="w-4 h-4 ml-1" />
+                    {isPaginating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
               </div>

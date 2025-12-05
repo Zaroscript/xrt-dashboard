@@ -8,7 +8,16 @@ interface SubscribersState {
   loading: boolean;
   error: string | null;
   searchTerm: string;
-  statusFilter: "all" | Subscriber["status"];
+  statusFilter:
+    | "all"
+    | "active"
+    | "inactive"
+    | "cancelled"
+    | "suspended"
+    | "pending_approval"
+    | "expired"
+    | "rejected"
+    | "pending";
   selectedSubscriber: Subscriber | null;
 }
 
@@ -59,6 +68,7 @@ interface SubscribersActions {
   updatePreferences: (id: string, preferences: any) => Promise<void>;
   approveSubscriber: (id: string, data?: any) => Promise<void>;
   rejectSubscriber: (id: string, reason: string) => Promise<void>;
+  clearPlanHistory: (id: string) => Promise<void>;
   syncSubscribers: () => Promise<void>;
 
   // Utility actions
@@ -66,7 +76,7 @@ interface SubscribersActions {
   getSubscribersBySubscription: (subscriptionId: string) => Subscriber[];
   getActiveSubscribers: () => Subscriber[];
   getInactiveSubscribers: () => Subscriber[];
-  getCancelledSubscribers: () => Subscriber[];
+  getCanceledSubscribers: () => Subscriber[];
   getSuspendedSubscribers: () => Subscriber[];
   getSubscriberStats: () => {
     total: number;
@@ -169,7 +179,9 @@ export const useSubscribersStore = create<SubscribersStore>()(
         set({ error: null });
         try {
           const response = await apiClient.post("/subscribers", subscriberData);
-          const newSubscriber = response.data.data;
+          // The API sends back the new subscriber in a nested structure
+          const newSubscriber =
+            response.data.data.subscriber || response.data.data;
           set((state) => ({
             subscribers: [...state.subscribers, newSubscriber],
           }));
@@ -188,17 +200,11 @@ export const useSubscribersStore = create<SubscribersStore>()(
       updateSubscriberApi: async (id: string, updates: Partial<Subscriber>) => {
         set({ error: null });
         try {
-          console.log("[UPDATE] Updating subscriber:", id, "with:", updates);
           const response = await apiClient.patch(`/subscribers/${id}`, updates);
-          console.log("[UPDATE] Response data:", response.data);
+          // The API sends back the updated subscriber in a nested structure
           const updatedSubscriber =
             response.data.data.subscriber || response.data.data;
-          console.log("[UPDATE] Updated subscriber:", updatedSubscriber);
-          console.log(
-            "[UPDATE] Has _id?",
-            !!updatedSubscriber._id,
-            updatedSubscriber._id
-          );
+
           set((state) => ({
             subscribers: state.subscribers.map((sub) =>
               sub._id === id ? updatedSubscriber : sub
@@ -210,7 +216,7 @@ export const useSubscribersStore = create<SubscribersStore>()(
           }));
           return updatedSubscriber;
         } catch (error) {
-          console.error("[UPDATE] Error:", error);
+          console.error("Failed to update subscriber:", error);
           set({
             error:
               error instanceof Error
@@ -222,22 +228,18 @@ export const useSubscribersStore = create<SubscribersStore>()(
       },
 
       deleteSubscriber: async (id: string) => {
-        set({ error: null });
+        set({ loading: true, error: null });
         try {
           await apiClient.delete(`/subscribers/${id}`);
-          set((state) => ({
-            subscribers: state.subscribers.filter((sub) => sub._id !== id),
-            selectedSubscriber:
-              state.selectedSubscriber?._id === id
-                ? null
-                : state.selectedSubscriber,
-          }));
+          get().removeSubscriber(id);
+          set({ loading: false });
         } catch (error) {
           set({
             error:
               error instanceof Error
                 ? error.message
                 : "Failed to delete subscriber",
+            loading: false,
           });
           throw error;
         }
@@ -245,44 +247,98 @@ export const useSubscribersStore = create<SubscribersStore>()(
 
       // Subscriber operations
       activateSubscriber: async (id) => {
-        await get().updateSubscriberApi(id, { status: "active" });
+        try {
+          await get().updateSubscriberApi(id, {
+            status: "active",
+            isActive: true,
+          });
+        } catch (error) {
+          console.error("Error activating subscriber:", error);
+          throw error;
+        }
       },
 
       deactivateSubscriber: async (id) => {
-        await get().updateSubscriberApi(id, { status: "inactive" });
+        try {
+          await get().updateSubscriberApi(id, {
+            status: "inactive",
+            isActive: false,
+          });
+        } catch (error) {
+          console.error("Error deactivating subscriber:", error);
+          throw error;
+        }
       },
 
       suspendSubscriber: async (id, reason) => {
         try {
-          // Use the generic update endpoint since the specific suspend endpoint might not exist
-          // or we can use the updateSubscriberApi helper
-          await get().updateSubscriberApi(id, {
+          const updateData: Partial<Subscriber> = {
             status: "suspended",
-            notes: reason, // Assuming notes field is used for reason, or we need to add suspensionReason to type
-          });
+            ...(reason && { suspensionReason: reason }),
+          };
+          await get().updateSubscriberApi(id, updateData);
         } catch (error) {
-          console.error("Error suspending subscription:", error);
+          console.error("Error suspending subscriber:", error);
           throw error;
         }
       },
 
       cancelSubscription: async (id, reason) => {
-        await get().updateSubscriberApi(id, {
-          status: "cancelled",
-          cancellationReason: reason,
-        });
+        try {
+          const updateData: Partial<Subscriber> = {
+            status: "cancelled",
+            isActive: false,
+            ...(reason && { cancellationReason: reason }),
+          };
+
+          // Also need to update the plan status
+          const subscriber = get().subscribers.find((s) => s._id === id);
+          if (subscriber?.plan) {
+            const planId =
+              typeof subscriber.plan.plan === "string"
+                ? subscriber.plan.plan
+                : subscriber.plan.plan._id;
+
+            updateData.plan = {
+              ...subscriber.plan,
+              plan: planId,
+              status: "cancelled",
+              notes: reason || subscriber.plan.notes,
+            };
+          }
+
+          await get().updateSubscriberApi(id, updateData);
+        } catch (error) {
+          console.error("Failed to cancel subscription:", error);
+          throw error;
+        }
       },
 
       updatePaymentMethod: async (id, paymentMethod) => {
-        await get().updateSubscriberApi(id, { paymentMethod });
+        try {
+          await get().updateSubscriberApi(id, { paymentMethod });
+        } catch (error) {
+          console.error("Error updating payment method:", error);
+          throw error;
+        }
       },
 
       updateBillingInfo: async (id, billingInfo) => {
-        await get().updateSubscriberApi(id, { billingInfo });
+        try {
+          await get().updateSubscriberApi(id, { billingInfo });
+        } catch (error) {
+          console.error("Error updating billing info:", error);
+          throw error;
+        }
       },
 
       updatePreferences: async (id, preferences) => {
-        await get().updateSubscriberApi(id, { preferences });
+        try {
+          await get().updateSubscriberApi(id, { preferences });
+        } catch (error) {
+          console.error("Error updating preferences:", error);
+          throw error;
+        }
       },
 
       approveSubscriber: async (id, data) => {
@@ -330,6 +386,26 @@ export const useSubscribersStore = create<SubscribersStore>()(
         }
       },
 
+      clearPlanHistory: async (id) => {
+        try {
+          const response = await apiClient.delete(`/subscribers/${id}/history`);
+          const updatedSubscriber = response.data.data.subscriber;
+
+          set((state) => ({
+            subscribers: state.subscribers.map((sub) =>
+              sub._id === id ? updatedSubscriber : sub
+            ),
+            selectedSubscriber:
+              state.selectedSubscriber?._id === id
+                ? updatedSubscriber
+                : state.selectedSubscriber,
+          }));
+        } catch (error) {
+          console.error("Error clearing plan history:", error);
+          throw error;
+        }
+      },
+
       syncSubscribers: async () => {
         set({ loading: true, error: null });
         try {
@@ -358,10 +434,8 @@ export const useSubscribersStore = create<SubscribersStore>()(
       },
 
       getSubscribersBySubscription: (subscriptionId: string) => {
-        return get().subscribers.filter((subscriber) =>
-          typeof subscriber.plan === "string"
-            ? subscriber.plan === subscriptionId
-            : subscriber.plan?._id === subscriptionId
+        return get().subscribers.filter(
+          (subscriber) => subscriber.plan.plan === subscriptionId
         );
       },
 
@@ -377,7 +451,7 @@ export const useSubscribersStore = create<SubscribersStore>()(
         );
       },
 
-      getCancelledSubscribers: () => {
+      getCanceledSubscribers: () => {
         return get().subscribers.filter(
           (subscriber) => subscriber.status === "cancelled"
         );
@@ -413,21 +487,19 @@ export const useSubscribersStore = create<SubscribersStore>()(
       getFilteredSubscribers: () => {
         const { subscribers, searchTerm, statusFilter } = get();
         return subscribers.filter((subscriber) => {
+          const user =
+            typeof subscriber.user === "object" ? subscriber.user : null;
           const matchesSearch =
-            searchTerm === "" ||
-            (typeof subscriber.user === "string"
-              ? subscriber.user
-              : subscriber.user.email
-            )
-              .toLowerCase()
-              .includes(searchTerm.toLowerCase()) ||
-            (subscriber.billingInfo?.contactPerson?.email &&
-              subscriber.billingInfo.contactPerson.email
-                .toLowerCase()
-                .includes(searchTerm.toLowerCase()));
+            !searchTerm ||
+            user?.fName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            user?.lName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            user?.email?.toLowerCase().includes(searchTerm.toLowerCase());
 
           const matchesStatus =
-            statusFilter === "all" || subscriber.status === statusFilter;
+            statusFilter === "all" ||
+            (statusFilter === "pending" &&
+              subscriber.status === "pending_approval") ||
+            subscriber.status === statusFilter;
 
           return matchesSearch && matchesStatus;
         });

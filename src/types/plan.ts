@@ -5,14 +5,14 @@ export interface Plan {
   price: number;
   monthlyPrice?: number | null;
   yearlyPrice?: number | null;
-  billingCycle: 'monthly' | 'yearly';
+  billingCycle: "monthly" | "yearly";
   features: string[];
   duration?: number;
   isActive: boolean;
   isFeatured?: boolean;
   yearlySavings?: number;
   discount?: {
-    type: 'percentage' | 'fixed';
+    type: "percentage" | "fixed";
     value: number;
     isActive: boolean;
     startDate?: Date;
@@ -27,23 +27,33 @@ export interface Plan {
   updatedAt?: string;
   isCustom?: boolean;
   badge?: {
-    text: string;
-    variant: 'default' | 'secondary' | 'destructive' | 'outline';
+    text?: string;
+    variant?:
+      | "default"
+      | "secondary"
+      | "destructive"
+      | "outline"
+      | "success"
+      | "warning"
+      | "info"
+      | "premium"
+      | "new"
+      | "limited";
   };
   maxUsers?: number;
   maxProjects?: number;
   maxStorage?: number;
-  supportLevel?: 'basic' | 'priority' | 'dedicated';
+  supportLevel?: "basic" | "priority" | "dedicated";
   customFeatures?: Record<string, any>;
 }
 
-export type PlanStatus = 'active' | 'inactive' | 'all';
+export type PlanStatus = "active" | "inactive" | "all";
 
 export interface PlanFilter {
   status: PlanStatus;
   search: string;
-  sortBy: 'name' | 'price' | 'createdAt';
-  sortOrder: 'asc' | 'desc';
+  sortBy: "name" | "price" | "createdAt";
+  sortOrder: "asc" | "desc";
 }
 
 export interface PlanRequest {
@@ -62,7 +72,7 @@ export interface PlanRequest {
     name: string;
     price: number;
   };
-  status: 'pending' | 'approved' | 'rejected';
+  status: "pending" | "approved" | "rejected";
   adminNote?: string;
   createdAt: string;
 }

@@ -26,9 +26,7 @@ export const authService = {
   },
 
   getMe: async (): Promise<{ user: User; clientProfile?: any }> => {
-    console.log('Calling getMe endpoint...');
     const response = await apiClient.get<{ status: string; data: { user: User; clientProfile?: any } }>('/auth/me');
-    console.log('getMe response:', response.data);
     return response.data.data;
   },
 

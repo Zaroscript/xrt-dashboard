@@ -1,109 +1,73 @@
 import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Invoice } from "@/stores/support/types";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Invoice, InvoiceClient, InvoiceUser } from "@/types/invoice.types";
 import { DollarSign, Download as DownloadIcon } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
-import { loadCompanySettings } from "@/utils/settings";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
+import { companySettingsApi, type CompanySettings } from "@/services/api/companySettingsApi";
 
 interface ViewInvoiceProps {
   invoice: Invoice | null;
   isOpen: boolean;
   onClose: () => void;
+  onDownload?: (invoiceId: string) => void;
 }
 
-interface CompanySettings {
-  companyName: string;
-  address: string;
-  city: string;
-  state: string;
-  zip: string;
-  email: string;
-  phone: string;
-  taxId: string;
-}
-
-const ViewInvoice = ({ invoice, isOpen, onClose }: ViewInvoiceProps) => {
+const ViewInvoice = ({
+  invoice,
+  isOpen,
+  onClose,
+  onDownload,
+}: ViewInvoiceProps) => {
   const pdfRef = useRef<HTMLDivElement>(null);
   const [companySettings, setCompanySettings] = useState<CompanySettings>({
-    companyName: 'Your Company Name',
-    address: '123 Business Street',
-    city: 'City',
-    state: 'ST',
-    zip: '12345',
-    email: 'contact@example.com',
-    phone: '+1 (555) 123-4567',
-    taxId: 'TAX-123456789',
+    companyName: "Your Company Name",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+    country: "",
+    email: "",
+    phone: "",
+    taxId: "",
+    website: "",
+    logo: "",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    dateFormat: "MM/DD/YYYY",
+    timeFormat: "12h",
+    currency: "USD",
   });
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
 
   useEffect(() => {
-    // Load company settings when component mounts
-    const settings = loadCompanySettings();
-    if (settings) {
+    // Fetch company settings from server when component mounts or dialog opens
+    if (isOpen) {
+      const fetchCompanySettings = async () => {
+        try {
+          setIsLoadingSettings(true);
+          const settings = await companySettingsApi.getSettings();
       setCompanySettings(settings);
+        } catch (error) {
+          console.error('Error loading company settings:', error);
+          // Keep default settings on error
+        } finally {
+          setIsLoadingSettings(false);
+        }
+      };
+      fetchCompanySettings();
     }
-  }, []);
+  }, [isOpen]);
 
   if (!invoice) return null;
 
-  const handleDownloadPdf = async () => {
-    if (!pdfRef.current) return;
-    
-    try {
-      // Hide elements before capturing
-      const elementsToHide = Array.from(document.querySelectorAll('.action-buttons, .status-badge'));
-      elementsToHide.forEach(el => el.classList.add('invisible'));
-      
-      // Get the dialog dimensions
-      const dialog = pdfRef.current.closest('[role="dialog"]');
-      const width = dialog?.clientWidth || 794; // Fallback to A4 width if dialog not found
-      const height = dialog?.clientHeight || 1123; // Fallback to A4 height if dialog not found
-      
-      // Calculate scale to fit content
-      const content = pdfRef.current;
-      const contentWidth = content.scrollWidth;
-      const contentHeight = content.scrollHeight;
-      const scale = Math.min(1, width / contentWidth);
-      
-      const canvas = await html2canvas(content, {
-        scale: window.devicePixelRatio * 2, // Higher quality
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        width: contentWidth,
-        height: contentHeight,
-        windowWidth: content.scrollWidth,
-        windowHeight: content.scrollHeight,
-        ignoreElements: (element) => {
-          return element.classList.contains('action-buttons') || 
-                 element.classList.contains('status-badge');
-        }
-      });
-      
-      // Restore visibility after capture
-      elementsToHide.forEach(el => el.classList.remove('invisible'));
-      
-      // Create PDF with the same dimensions as the dialog
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: contentWidth > contentHeight ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [contentWidth, contentHeight]
-      });
-      
-      // Add image to PDF without scaling
-      pdf.addImage(imgData, 'PNG', 0, 0, contentWidth, contentHeight);
-      
-      pdf.save(`invoice-${invoice.id}.pdf`);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
+  const handleDownloadPdf = () => {
+    // Use parent's download handler if provided, otherwise show message
+    if (onDownload && (invoice._id || invoice.id)) {
+      onDownload(invoice._id || invoice.id);
+    } else {
+      console.warn("No download handler provided");
     }
   };
 
@@ -122,26 +86,48 @@ const ViewInvoice = ({ invoice, isOpen, onClose }: ViewInvoiceProps) => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return format(new Date(dateString), "MMM dd, yyyy");
+  const formatDate = (date: string | Date) => {
+    return format(new Date(date), "MMM dd, yyyy");
   };
+
+  // Get client data safely, handling different data formats
+  const getClientData = (client: string | InvoiceClient | undefined) => {
+    if (!client || typeof client === "string") return null;
+
+    const clientObj = client as InvoiceClient;
+    const user = typeof clientObj.user === 'object' ? clientObj.user : null;
+    
+    return {
+      companyName: clientObj.companyName || "Unknown Client",
+      email: user?.email || clientObj.email || null,
+      phone: user?.phone || clientObj.phone || null,
+      fName: user?.fName || null,
+      lName: user?.lName || null,
+      address: clientObj.address || null,
+    };
+  };
+
+  const clientData = getClientData(invoice.client);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl p-0 overflow-y-auto max-h-[90vh]">
+        <DialogTitle className="sr-only">
+          Invoice #{invoice.invoiceNumber || invoice._id}
+        </DialogTitle>
         <div className="bg-background rounded-lg p-6" ref={pdfRef}>
-          {/* Hidden title for PDF */}
-          <h1 className="sr-only">Invoice #{invoice.id}</h1>
-          
           {/* Header */}
           <div className="p-6 border-b">
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold">Invoice #{invoice.id}</h2>
+                  <h2 className="text-2xl font-bold">
+                    Invoice #
+                    {invoice.invoiceNumber || invoice._id.substring(0, 8)}
+                  </h2>
                 </div>
                 <p className="text-muted-foreground mt-2">
-                  Issued on {formatDate(invoice.createdAt)}
+                  Issued on {formatDate(invoice.issueDate)}
                 </p>
               </div>
               <div
@@ -159,26 +145,72 @@ const ViewInvoice = ({ invoice, isOpen, onClose }: ViewInvoiceProps) => {
           <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
               <h3 className="text-lg font-semibold mb-4">Bill From</h3>
-              <p className="font-medium">Your Company Name</p>
-              <p className="text-muted-foreground">123 Business Street</p>
-              <p className="text-muted-foreground">City, ST 12345</p>
-              <p className="text-muted-foreground">contact@example.com</p>
+              <p className="font-medium">{companySettings.companyName}</p>
+              {companySettings.address && (
+              <p className="text-muted-foreground">{companySettings.address}</p>
+              )}
+              {(companySettings.city || companySettings.state || companySettings.zip) && (
+              <p className="text-muted-foreground">
+                  {[
+                    companySettings.city,
+                    companySettings.state,
+                    companySettings.zip
+                  ].filter(Boolean).join(', ')}
+              </p>
+              )}
+              {companySettings.country && (
+                <p className="text-muted-foreground">{companySettings.country}</p>
+              )}
+              {companySettings.email && (
+              <p className="text-muted-foreground">{companySettings.email}</p>
+              )}
+              {companySettings.phone && (
+                <p className="text-muted-foreground">{companySettings.phone}</p>
+              )}
             </div>
 
             <div>
               <h3 className="text-lg font-semibold mb-4">Bill To</h3>
-              <p className="font-medium">{invoice.userName}</p>
-              <p className="text-muted-foreground">{invoice.userEmail}</p>
-              {invoice.userAddress && (
+              {clientData ? (
                 <>
+                  <p className="font-medium">{clientData.companyName}</p>
+                  {(clientData.fName || clientData.lName) && (
+                    <p className="text-muted-foreground">
+                      {[clientData.fName, clientData.lName].filter(Boolean).join(' ')}
+                    </p>
+                  )}
+                  {clientData.email && (
+                    <p className="text-muted-foreground">{clientData.email}</p>
+                  )}
+                  {clientData.phone && (
+                    <p className="text-muted-foreground">{clientData.phone}</p>
+                  )}
+                  {clientData.address && (
+                <>
+                      {clientData.address.street && (
+                        <p className="text-muted-foreground">
+                          {clientData.address.street}
+                        </p>
+                      )}
+                      {(clientData.address.city || clientData.address.state || clientData.address.postalCode) && (
                   <p className="text-muted-foreground">
-                    {invoice.userAddress.street}
+                          {[
+                            clientData.address.city,
+                            clientData.address.state,
+                            clientData.address.postalCode
+                          ].filter(Boolean).join(', ')}
                   </p>
+                      )}
+                      {clientData.address.country && (
                   <p className="text-muted-foreground">
-                    {invoice.userAddress.city}, {invoice.userAddress.state}{" "}
-                    {invoice.userAddress.zip}
+                          {clientData.address.country}
                   </p>
+                      )}
+                    </>
+                  )}
                 </>
+              ) : (
+                <p className="text-muted-foreground">Client information not available</p>
               )}
             </div>
           </div>
@@ -193,7 +225,7 @@ const ViewInvoice = ({ invoice, isOpen, onClose }: ViewInvoiceProps) => {
                       Description
                     </th>
                     <th className="text-right py-3 px-4 font-medium">
-                      Quantity
+                      Duration
                     </th>
                     <th className="text-right py-3 px-4 font-medium">
                       Unit Price
@@ -202,25 +234,27 @@ const ViewInvoice = ({ invoice, isOpen, onClose }: ViewInvoiceProps) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {invoice.items?.map((item, index) => (
+                  {invoice.items?.map((item, index) => {
+                    const durationType = (item as any).durationType || 'one-time';
+                    const durationLabel = durationType === 'one-time' ? 'One-time' :
+                                         durationType === 'monthly' ? 'Monthly' :
+                                         durationType === 'quarterly' ? 'Quarterly' :
+                                         durationType === 'annual' ? 'Annual' : durationType;
+                    return (
                     <tr key={index} className="border-t">
                       <td className="py-3 px-4">
                         <p className="font-medium">{item.description}</p>
-                        {item.details && (
-                          <p className="text-sm text-muted-foreground">
-                            {item.details}
-                          </p>
-                        )}
                       </td>
-                      <td className="py-3 px-4 text-right">{item.quantity}</td>
+                        <td className="py-3 px-4 text-right">{durationLabel}</td>
                       <td className="py-3 px-4 text-right">
                         ${item.unitPrice.toFixed(2)}
                       </td>
                       <td className="py-3 px-4 text-right font-medium">
-                        ${(item.quantity * item.unitPrice).toFixed(2)}
+                          ${(1 * item.unitPrice).toFixed(2)}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -232,47 +266,38 @@ const ViewInvoice = ({ invoice, isOpen, onClose }: ViewInvoiceProps) => {
                   <span className="text-muted-foreground">Subtotal</span>
                   <span>${invoice.subtotal?.toFixed(2) || "0.00"}</span>
                 </div>
-                {invoice.taxAmount !== undefined && (
+                {invoice.tax > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Tax
-                    </span>
-                    <span>${invoice.taxAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                {invoice.discountAmount !== undefined && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Discount</span>
-                    <span className="text-green-600">
-                      -${invoice.discountAmount.toFixed(2)}
-                    </span>
+                    <span className="text-muted-foreground">Tax</span>
+                    <span>${invoice.tax.toFixed(2)}</span>
                   </div>
                 )}
                 <Separator className="my-2" />
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total</span>
-                  <span>${invoice.amount.toFixed(2)}</span>
+                  <span>${invoice.total.toFixed(2)}</span>
                 </div>
               </div>
             </div>
 
             {/* Notes */}
             {invoice.notes && (
-              <div className="space-y-1">
-                <h2 className="text-lg font-semibold">{localStorage.getItem('companyName')}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {localStorage.getItem('address')}<br />
-                  {localStorage.getItem('city')}, {localStorage.getItem('state')} {localStorage.getItem('zip')}<br />
-                  {localStorage.getItem('phone')} | {localStorage.getItem('email')}<br />
-                  Tax ID: {localStorage.getItem('taxId')}
-                </p>
+              <div className="space-y-1 mt-4">
+                <h4 className="font-semibold">Notes</h4>
+                <p className="text-sm text-muted-foreground">{invoice.notes}</p>
               </div>
             )}
 
+            {/* Company Footer Info */}
+            <div className="mt-8 pt-6 border-t text-sm text-muted-foreground">
+              <p>{companySettings.companyName}</p>
+              <p>Tax ID: {companySettings.taxId}</p>
+            </div>
+
             {/* Footer */}
-            <div className="mt-8 pt-6 pb-6 border-t text-center text-sm text-muted-foreground">
+            <div className="mt-4 pb-6 text-center text-sm text-muted-foreground">
               <p className="mt-1">
-                Invoice was created on {formatDate(invoice.createdAt)}.
+                Invoice was created on {formatDate(invoice.issueDate)}.
                 {invoice.dueDate && ` Due date: ${formatDate(invoice.dueDate)}`}
               </p>
             </div>

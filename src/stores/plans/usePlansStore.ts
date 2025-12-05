@@ -119,14 +119,11 @@ export const usePlansStore = create<PlansStore>()(
 
       // API actions
       fetchPlans: async () => {
-        console.trace("fetchPlans called by:");
         set({ loading: true, error: null });
         try {
           const response = await apiClient.get("/plans");
-          console.log("Plans API Response:", response);
           // Handle API response structure: {status: "success", data: {plans: [...]}}
           const plans = response.data?.data?.plans || [];
-          console.log("Processed plans:", plans);
           set({ plans, loading: false });
         } catch (error) {
           const errorMessage =

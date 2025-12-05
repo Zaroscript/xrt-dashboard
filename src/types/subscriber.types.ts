@@ -65,6 +65,7 @@ export interface Plan {
         _id: string;
         name: string;
         price: number;
+        billingCycle?: "monthly" | "quarterly" | "annually" | "yearly";
       };
   startDate?: string | null;
   endDate?: string | null;
@@ -94,6 +95,7 @@ export interface User {
   phone?: string;
   email: string;
   role?: string;
+  permissions?: string[];
   avatar?: string;
   initials?: string;
   isActive?: boolean;

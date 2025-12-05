@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useSubscribersStore } from "@/stores/subscribers/useSubscribersStore";
+import { useAuthStore } from "@/stores/auth/useAuthStore";
+import { useClientsStore } from "@/stores/clients/useClientsStore";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { AxiosError } from "axios";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +45,10 @@ import {
   X,
   Info,
   Pencil,
+  History,
+  Settings,
+  Building2,
+  Receipt,
 } from "lucide-react";
 import {
   Card,
@@ -82,6 +88,10 @@ import { cn } from "@/lib/utils";
 import { Subscriber } from "@/stores/types";
 import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RecordPaymentDialog } from "./RecordPaymentDialog";
+import { BillingInfoDialog } from "./BillingInfoDialog";
+import { PreferencesDialog } from "./PreferencesDialog";
+import { PlanHistoryDialog } from "./PlanHistoryDialog";
 
 interface SubscriberCardProps {
   subscriber: Subscriber;
@@ -96,7 +106,7 @@ interface SubscriberCardProps {
       | "cancelled"
       | "rejected"
       | "suspended"
-  ) => void;
+  ) => Promise<void>;
   className?: string;
 }
 
@@ -107,6 +117,9 @@ const SubscriberCard = ({
   onStatusChange,
   className,
 }: SubscriberCardProps) => {
+  const { user: authUser } = useAuthStore();
+  const { getClientByUserId } = useClientsStore();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -114,43 +127,62 @@ const SubscriberCard = ({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
   const [isSuspending, setIsSuspending] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showBillingDialog, setShowBillingDialog] = useState(false);
+  const [showPreferencesDialog, setShowPreferencesDialog] = useState(false);
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const { toast } = useToast();
+
+  // Get the current subscriber data from store to ensure real-time updates
+  const currentSubscriber = useSubscribersStore(
+    (state) =>
+      state.subscribers.find((sub) => sub._id === subscriber._id) || subscriber
+  );
 
   // Get plan details with proper type safety
   const getPlanDetails = () => {
-    if (!subscriber.plan)
+    if (!currentSubscriber.plan)
       return { name: "No plan", billingCycle: "monthly", price: 0 };
 
-    // If plan.plan is an object, use it directly
-    if (
-      typeof subscriber.plan.plan === "object" &&
-      subscriber.plan.plan !== null
-    ) {
-      return {
-        name: subscriber.plan.plan.name || "Unnamed Plan",
-        billingCycle:
-          "billingCycle" in subscriber.plan.plan
-            ? String(subscriber.plan.plan.billingCycle)
-            : "monthly",
-        price:
-          "price" in subscriber.plan.plan
-            ? Number(subscriber.plan.plan.price) || 0
-            : 0,
-      };
-    }
+    try {
+      // If plan.plan is an object, use it directly
+      if (
+        typeof currentSubscriber.plan.plan === "object" &&
+        currentSubscriber.plan.plan !== null
+      ) {
+        const planObj = currentSubscriber.plan.plan as {
+          name?: string;
+          billingCycle?: string;
+          price?: number;
+        };
+        return {
+          name: planObj.name || "Unknown Plan",
+          billingCycle: planObj.billingCycle || "monthly",
+          price: currentSubscriber.plan.price ?? planObj.price ?? 0,
+        };
+      }
 
-    // If plan.plan is a string (ID), use the plan properties directly from subscriber.plan
-    const planData = subscriber.plan as any; // Temporary type assertion
-    return {
-      name: "Plan (ID: " + subscriber.plan.plan + ")",
-      billingCycle: planData.billingCycle || "monthly",
-      price: planData.amount || planData.price || 0,
-    };
+      // If plan.plan is a string (ID), use the plan properties directly from subscriber.plan
+      const planData = currentSubscriber.plan as {
+        name?: string;
+        billingCycle?: string;
+        amount?: number;
+        price?: number;
+      };
+      return {
+        name: planData.name || "Unknown Plan",
+        billingCycle: planData.billingCycle || "monthly",
+        price: planData.amount || planData.price || 0,
+      };
+    } catch (error) {
+      console.error("Error getting plan details:", error);
+      return { name: "Error loading plan", billingCycle: "monthly", price: 0 };
+    }
   };
 
   const planDetails = getPlanDetails();
 
-  // Format date helper function
+  // Make dates readable and optionally show relative time
   const formatDate = (
     date: Date | string | undefined,
     withRelative = false
@@ -185,14 +217,14 @@ const SubscriberCard = ({
     }
   };
 
-  // Helper function to safely get user name
+  // Get the user's name safely, no matter how the data is structured
   const getUserName = (): string => {
     if (!subscriber.user) return "Unknown User";
     if (typeof subscriber.user === "string") return "User";
     return subscriber.user.fName || "User";
   };
 
-  // Handle copy to clipboard
+  // Copy text to clipboard and show a nice confirmation
   const copyToClipboard = (text: string, message: string) => {
     navigator.clipboard.writeText(text);
     toast({
@@ -262,7 +294,7 @@ const SubscriberCard = ({
     setIsLoading(true);
     try {
       if (newStatus === "active") {
-        if (subscriber.status === "pending_approval") {
+        if (status === "pending_approval") {
           await approveSubscriber(subscriber._id);
         } else {
           await activateSubscriber(subscriber._id);
@@ -293,8 +325,9 @@ const SubscriberCard = ({
     } catch (error) {
       console.error("Error updating status:", error);
       const errorMessage =
-        error instanceof AxiosError
-          ? error.response?.data?.message ||
+        error && typeof error === "object" && "response" in error
+          ? (error as { response?: { data?: { message?: string } } }).response
+              ?.data?.message ||
             "Failed to update subscription status. Please try again."
           : error instanceof Error
           ? error.message
@@ -327,8 +360,9 @@ const SubscriberCard = ({
     } catch (error) {
       console.error("Error suspending subscription:", error);
       const errorMessage =
-        error instanceof AxiosError
-          ? error.response?.data?.message ||
+        error && typeof error === "object" && "response" in error
+          ? (error as { response?: { data?: { message?: string } } }).response
+              ?.data?.message ||
             "Failed to suspend subscription. Please try again."
           : error instanceof Error
           ? error.message
@@ -352,7 +386,6 @@ const SubscriberCard = ({
       onUpdate(subscriber);
     } else {
       // Default edit behavior if no onUpdate handler is provided
-      console.log("Edit subscriber:", subscriber);
       toast({
         title: "Edit Mode",
         description: "Edit functionality would open a form here",
@@ -363,10 +396,12 @@ const SubscriberCard = ({
 
   // Extract user information with fallbacks
   const user =
-    typeof subscriber.user === "string" || !subscriber.user
+    typeof currentSubscriber.user === "string" || !currentSubscriber.user
       ? {
           _id:
-            typeof subscriber.user === "string" ? subscriber.user : "unknown",
+            typeof currentSubscriber.user === "string"
+              ? currentSubscriber.user
+              : "unknown",
           email: "unknown@example.com",
           fName: "Unknown",
           lName: "User",
@@ -375,47 +410,33 @@ const SubscriberCard = ({
           createdAt: new Date().toISOString(),
         }
       : {
-          ...subscriber.user,
-          avatar: subscriber.user.avatar || undefined,
-          phone: subscriber.user.phone || "N/A",
+          ...currentSubscriber.user,
+          avatar: currentSubscriber.user.avatar || undefined,
+          phone: currentSubscriber.user.phone || "N/A",
         };
 
   // Extract plan information with fallbacks
-  const plan =
-    typeof subscriber.plan?.plan === "string"
-      ? {
-          _id: "unknown-plan",
-          name: "Unknown Plan",
-          price: 0,
-          billingCycle: "monthly",
-          description: "Plan information not available",
-          features: [],
-          isActive: true,
-        }
-      : subscriber.plan?.plan || {
-          _id: "no-plan",
-          name: "No Plan",
-          price: 0,
-          billingCycle: "monthly",
-          description: "No active subscription",
-          features: [],
-          isActive: false,
-        };
+  const plan = planDetails;
 
-  // Get subscription status with fallback
-  const status = subscriber.plan?.status || "inactive";
+  // Get subscription status directly from backend (single source of truth)
+  const getSubscriptionStatus = () => {
+    // Use the current subscriber status from store as primary source
+    return currentSubscriber.status || subscriber.status || "inactive";
+  };
 
-  // Get plan details which handles all the different cases for getting the price
-  const selectedPlanDetails = getPlanDetails();
-  const amount = selectedPlanDetails.price;
+  const status = getSubscriptionStatus();
+
+  // Get plan price from planDetails
+  const amount = planDetails.price;
 
   // Calculate subscription progress if end date is available
   const subscriptionProgress = (() => {
-    if (!subscriber.plan?.startDate || !subscriber.plan?.endDate) return null;
+    if (!currentSubscriber.plan?.startDate || !currentSubscriber.plan?.endDate)
+      return null;
 
-    const start = new Date(subscriber.plan.startDate).getTime();
-    const end = new Date(subscriber.plan.endDate).getTime();
-    const now = new Date().getTime();
+    const start = new Date(currentSubscriber.plan.startDate).getTime();
+    const end = new Date(currentSubscriber.plan.endDate).getTime();
+    const now = Date.now();
 
     if (now >= end) return 100;
     if (now <= start) return 0;
@@ -425,57 +446,59 @@ const SubscriberCard = ({
     return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
   })();
 
-  // Status badge configuration with more detailed information
+  // Status badge configuration matching backend model
   const getStatusConfig = (status: string) => {
     const baseConfig = {
-      color: "bg-gray-100 text-gray-800 border-gray-200",
+      color:
+        "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700",
       icon: Info,
       label: status.charAt(0).toUpperCase() + status.slice(1).replace("_", " "),
       description: "Subscription status",
       action: null as string | null,
     };
 
+    // Backend-validated status configurations
     const statusConfigs = {
       active: {
         color:
-          "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800",
+          "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800",
         icon: CheckCircle,
         description: "Subscription is active and in good standing",
         action: "Suspend",
       },
       pending_approval: {
         color:
-          "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800",
+          "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800",
         icon: Clock,
-        description: "Awaiting approval or payment",
+        description: "Awaiting approval or payment verification",
         action: "Approve",
       },
       expired: {
         color:
           "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800",
         icon: XCircle,
-        description: "Subscription has expired",
+        description: "Subscription period has ended",
         action: "Renew",
       },
       cancelled: {
         color:
-          "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700",
+          "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700",
         icon: XCircle,
-        description: "Subscription has been cancelled",
+        description: "Subscription was cancelled by user or admin",
         action: "Reactivate",
       },
       rejected: {
         color:
-          "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800",
+          "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800",
         icon: X,
-        description: "Subscription was rejected",
+        description: "Subscription request was rejected",
         action: "Review",
       },
       suspended: {
         color:
           "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800",
         icon: AlertTriangle,
-        description: "Subscription is suspended",
+        description: "Subscription is temporarily suspended",
         action: "Reactivate",
       },
     };
@@ -489,7 +512,7 @@ const SubscriberCard = ({
   const statusConfig = getStatusConfig(status);
   const StatusIcon = statusConfig.icon;
 
-  // Determine available actions based on current status
+  // Determine available actions based on current backend-validated status
   const availableActions = [
     ...(status === "active"
       ? [
@@ -497,7 +520,7 @@ const SubscriberCard = ({
           { label: "Cancel", value: "cancelled" as const, icon: XCircle },
         ]
       : (["suspended", "cancelled", "expired", "rejected"] as const).includes(
-          status as any
+          status as "suspended" | "cancelled" | "expired" | "rejected"
         )
       ? [{ label: "Reactivate", value: "active" as const, icon: Play }]
       : status === "pending_approval"
@@ -533,7 +556,19 @@ const SubscriberCard = ({
       ].includes(action) &&
       onStatusChange
     ) {
-      await handleStatusChange(action as any);
+      await handleStatusChange(
+        action as
+          | "active"
+          | "cancelled"
+          | "pending_approval"
+          | "expired"
+          | "rejected",
+        action === "cancelled"
+          ? `Cancelled by ${authUser?.fName || "Admin"} ${
+              authUser?.lName || ""
+            }`.trim()
+          : ""
+      );
     } else if (action === "suspended") {
       // For suspend, we show the dialog instead of directly changing status
       setShowSuspendDialog(true);
@@ -586,6 +621,7 @@ const SubscriberCard = ({
     setIsExpanded(!isExpanded);
   };
 
+  // Status variant styling matching backend model
   const getStatusVariant = (status: string) => {
     switch (status) {
       case "active":
@@ -598,6 +634,8 @@ const SubscriberCard = ({
         return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800";
       case "expired":
         return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700";
+      case "rejected":
+        return "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800";
       default:
         return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700";
     }
@@ -627,7 +665,7 @@ const SubscriberCard = ({
         <div className="relative">
           <div
             className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${getPlanColor(
-              plan?.name
+              planDetails.name
             )}`}
           />
           <CardHeader className="pb-3 pt-6">
@@ -640,15 +678,19 @@ const SubscriberCard = ({
                   <span
                     className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${
                       status === "active"
-                        ? "bg-green-500"
-                        : status === "suspended" ||
-                          status === "pending_approval"
-                        ? "bg-yellow-500"
-                        : status === "inactive" ||
-                          status === "cancelled" ||
-                          status === "expired" ||
-                          status === "rejected"
+                        ? "bg-emerald-500"
+                        : status === "suspended"
+                        ? "bg-orange-500"
+                        : status === "pending_approval"
+                        ? "bg-amber-500"
+                        : status === "cancelled"
+                        ? "bg-slate-500"
+                        : status === "expired"
                         ? "bg-red-500"
+                        : status === "rejected"
+                        ? "bg-rose-500"
+                        : status === "inactive"
+                        ? "bg-gray-400"
                         : "bg-gray-400"
                     }`}
                   ></span>
@@ -673,23 +715,30 @@ const SubscriberCard = ({
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreVertical className="h-4 w-4" />
-                      <span className="sr-only">More options</span>
+                      <MoreVertical className="w-4 h-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-
-                    {/* Edit Action */}
+                  <DropdownMenuContent align="end">
                     <DropdownMenuItem
-                      onClick={() => handleAction("edit")}
+                      onClick={() => {
+                        const client = getClientByUserId(user._id);
+                        if (client) {
+                          navigate(`/dashboard/clients/${client._id}`);
+                        } else {
+                          toast({
+                            title: "Client Profile Not Found",
+                            description:
+                              "Could not find a client profile associated with this subscriber.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
                       disabled={isLoading || isDeleting}
                     >
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit Details
+                      <User className="mr-2 h-4 w-4 text-primary" />
+                      View Profile
                     </DropdownMenuItem>
-
+                    <DropdownMenuSeparator />
                     {/* Status-Specific Actions */}
                     {status === "pending_approval" && (
                       <>
@@ -743,6 +792,41 @@ const SubscriberCard = ({
                         Reactivate
                       </DropdownMenuItem>
                     )}
+
+                    <DropdownMenuSeparator />
+
+                    {/* Additional Actions */}
+                    <DropdownMenuItem
+                      onClick={() => setShowPaymentDialog(true)}
+                      disabled={isLoading || isDeleting}
+                    >
+                      <Receipt className="mr-2 h-4 w-4 text-green-600" />
+                      Record Payment
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      onClick={() => setShowBillingDialog(true)}
+                      disabled={isLoading || isDeleting}
+                    >
+                      <Building2 className="mr-2 h-4 w-4 text-blue-600" />
+                      Billing Info
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      onClick={() => setShowPreferencesDialog(true)}
+                      disabled={isLoading || isDeleting}
+                    >
+                      <Settings className="mr-2 h-4 w-4 text-purple-600" />
+                      Preferences
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      onClick={() => setShowHistoryDialog(true)}
+                      disabled={isLoading || isDeleting}
+                    >
+                      <History className="mr-2 h-4 w-4 text-orange-600" />
+                      Plan History
+                    </DropdownMenuItem>
 
                     <DropdownMenuSeparator />
 
@@ -875,26 +959,22 @@ const SubscriberCard = ({
               <div className="flex gap-2 pt-5 mt-4 border-t border-border/50">
                 {onStatusChange && (
                   <Button
-                    variant={
-                      subscriber.status === "active" ? "outline" : "default"
-                    }
+                    variant={status === "active" ? "outline" : "default"}
                     size="sm"
                     className="flex-1 gap-1.5"
                     onClick={() =>
-                      handleAction(
-                        subscriber.status === "active" ? "suspended" : "active"
-                      )
+                      handleAction(status === "active" ? "suspended" : "active")
                     }
                     disabled={isLoading || isDeleting}
                   >
                     {isLoading ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : subscriber.status === "active" ? (
+                    ) : status === "active" ? (
                       <Pause className="h-3.5 w-3.5" />
                     ) : (
                       <Play className="h-3.5 w-3.5" />
                     )}
-                    {subscriber.status === "active" ? "Suspend" : "Activate"}
+                    {status === "active" ? "Suspend" : "Activate"}
                   </Button>
                 )}
 
@@ -1008,6 +1088,44 @@ const SubscriberCard = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* New Feature Dialogs */}
+      <RecordPaymentDialog
+        subscriberId={subscriber._id}
+        open={showPaymentDialog}
+        onOpenChange={setShowPaymentDialog}
+        onSuccess={() => {
+          // Refresh subscriber data if needed
+          toast({
+            title: "Payment Recorded",
+            description: "Payment has been recorded successfully.",
+          });
+        }}
+      />
+
+      <BillingInfoDialog
+        subscriber={subscriber}
+        open={showBillingDialog}
+        onOpenChange={setShowBillingDialog}
+        onSuccess={() => {
+          // Data will auto-update through store
+        }}
+      />
+
+      <PreferencesDialog
+        subscriber={subscriber}
+        open={showPreferencesDialog}
+        onOpenChange={setShowPreferencesDialog}
+        onSuccess={() => {
+          // Data will auto-update through store
+        }}
+      />
+
+      <PlanHistoryDialog
+        subscriber={subscriber}
+        open={showHistoryDialog}
+        onOpenChange={setShowHistoryDialog}
+      />
     </motion.div>
   );
 };

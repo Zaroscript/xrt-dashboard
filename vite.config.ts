@@ -33,17 +33,13 @@ export default defineConfig(({ mode }: { mode: string }) => ({
         onProxyRes: (proxyRes: any, req: any, res: any) => {
           // Forward Set-Cookie headers
           if (proxyRes.headers['set-cookie']) {
-            console.log('=== PROXY COOKIE DEBUG ===');
-            console.log('Original Set-Cookie headers:', proxyRes.headers['set-cookie']);
             
             proxyRes.headers['set-cookie'] = proxyRes.headers['set-cookie'].map((cookie: string) => {
               // Remove domain attribute for localhost
               const modifiedCookie = cookie.replace(/; domain=.*?(;|$)/, '$1');
-              console.log('Modified cookie:', modifiedCookie);
               return modifiedCookie;
             });
             
-            console.log('Final Set-Cookie headers:', proxyRes.headers['set-cookie']);
           }
         },
         configure: (proxy, _options) => {

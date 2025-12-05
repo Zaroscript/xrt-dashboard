@@ -43,7 +43,7 @@ export interface Client {
   currentPlan?: PlanRef | string;
   subscription?: {
     plan: PlanRef | string;
-    status: "active" | "cancelled" | "expired" | "pending";
+    status: "active" | "canceled" | "expired" | "pending";
     amount: number;
     startDate: string;
     expiresAt: string;
@@ -223,7 +223,7 @@ export interface Subscriber {
       | "pending_approval"
       | "active"
       | "expired"
-      | "cancelled"
+      | "canceled"
       | "rejected"
       | "suspended";
     approvalStatus: {
@@ -250,7 +250,7 @@ export interface Subscriber {
     | "suspended"
     | "pending_approval"
     | "expired"
-    | "cancelled"
+    | "canceled"
     | "rejected"
     | "pending";
   suspensionReason?: string;

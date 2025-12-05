@@ -196,7 +196,6 @@ export const useTicketsStore = create<TicketsStore>()(
 
       assignToUser: async (id, userId) => {
         // Note: assignedTo field not in Ticket interface - would need to be added to backend model
-        console.log('assignToUser functionality requires backend model update');
       },
 
       addResponse: async (id, response) => {

@@ -31,7 +31,6 @@ import {
   InvoiceStatus,
   InvoiceItem,
   InvoiceClient,
-  InvoiceUser,
 } from "@/types/invoice.types";
 import {
   Popover,
@@ -44,9 +43,9 @@ import { getClients } from "@/services/clientService";
 import { getUsers } from "@/services/userService";
 import { toast } from "sonner";
 
-const invoiceFormSchema = z.object({
+export const invoiceFormSchema = z.object({
   client: z.string().min(1, "Client is required"),
-  user: z.string().min(1, "User is required"),
+  user: z.string().min(1, "Assigned user is required"),
   issueDate: z.date({
     required_error: "Issue date is required",
   }),
@@ -60,7 +59,9 @@ const invoiceFormSchema = z.object({
     .array(
       z.object({
         description: z.string().min(1, "Description is required"),
-        quantity: z.number().min(1, "Quantity must be at least 1"),
+        durationType: z.enum(['one-time', 'monthly', 'quarterly', 'annual'], {
+          required_error: "Duration type is required",
+        }),
         unitPrice: z.number().min(0, "Price must be a positive number"),
         taxRate: z.number().min(0).max(100).default(0),
       })
@@ -70,9 +71,15 @@ const invoiceFormSchema = z.object({
   terms: z.string().optional(),
 });
 
-type InvoiceFormValues = z.infer<typeof invoiceFormSchema> & {
+export type InvoiceFormValues = {
+  client: string;
+  user: string;
+  status: "draft" | "sent" | "paid" | "overdue" | "cancelled";
+  issueDate: Date;
+  dueDate: Date;
   items: Array<{
     description: string;
+    durationType: 'one-time' | 'monthly' | 'quarterly' | 'annual';
     quantity: number;
     unitPrice: number;
     taxRate?: number;
@@ -95,12 +102,14 @@ interface Client extends InvoiceClient {
   email: string;
 }
 
-interface User extends InvoiceUser {
+interface User {
   _id: string;
   fName: string;
   lName: string;
   email: string;
+  role: string;
 }
+
 
 export function InvoiceForm({
   initialData,
@@ -118,12 +127,13 @@ export function InvoiceForm({
       try {
         const [clientsData, usersData] = await Promise.all([
           getClients(),
-          getUsers(),
+          getUsers()
         ]);
         setClients(clientsData);
         setUsers(usersData);
       } catch (error) {
         console.error("Error fetching data:", error);
+        setError("Failed to load data");
       } finally {
         setIsLoading(false);
       }
@@ -152,15 +162,17 @@ export function InvoiceForm({
       status: initialData?.status || "draft",
       items: initialData?.items?.map((item) => ({
         description: item.description || "",
-        quantity: item.quantity || 1,
+        durationType: (item as any).durationType || 'one-time',
         unitPrice: item.unitPrice || 0,
         taxRate: item.taxRate || 0,
+        quantity: 1,
       })) || [
         {
           description: "",
-          quantity: 1,
+          durationType: 'one-time' as const,
           unitPrice: 0,
           taxRate: 0,
+          quantity: 1,
         },
       ],
       notes: initialData?.notes || "",
@@ -174,7 +186,7 @@ export function InvoiceForm({
   });
 
   const addItem = () => {
-    append({ description: "", quantity: 1, unitPrice: 0, taxRate: 0 });
+    append({ description: "", durationType: 'one-time' as const, unitPrice: 0, taxRate: 0, quantity: 1 });
   };
 
   const removeItem = (index: number) => {
@@ -224,7 +236,7 @@ export function InvoiceForm({
             )}
           />
 
-          {/* User Selection */}
+          {/* User/Assignee Selection */}
           <FormField
             control={form.control}
             name="user"
@@ -249,7 +261,7 @@ export function InvoiceForm({
                       <SelectContent>
                         {users.map((user) => (
                           <SelectItem key={user._id} value={user._id}>
-                            {`${user.fName} ${user.lName}`}
+                            {user.fName} {user.lName} ({user.email})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -399,18 +411,28 @@ export function InvoiceForm({
               />
               <FormField
                 control={form.control}
-                name={`items.${index}.quantity`}
+                name={`items.${index}.durationType`}
                 render={({ field }) => (
                   <FormItem className="col-span-2">
                     <FormLabel className={cn(index > 0 && "sr-only")}>
-                      Qty
+                      Duration
                     </FormLabel>
-                    <Input
-                      type="number"
-                      min="1"
-                      {...field}
-                      onChange={(e) => field.onChange(Number(e.target.value))}
-                    />
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select duration" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="one-time">One-time</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="annual">Annual</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -514,7 +536,10 @@ export function InvoiceForm({
                 form
                   .watch("items")
                   .reduce(
-                    (sum, item) => sum + item.quantity * item.unitPrice,
+                    (sum, item) => {
+                      const unitPrice = Number(item.unitPrice) || 0;
+                      return sum + unitPrice;
+                    },
                     0
                   )
               )}
@@ -530,10 +555,11 @@ export function InvoiceForm({
                 form
                   .watch("items")
                   .reduce(
-                    (sum, item) =>
-                      sum +
-                      (item.quantity * item.unitPrice * (item.taxRate || 0)) /
-                        100,
+                    (sum, item) => {
+                      const unitPrice = Number(item.unitPrice) || 0;
+                      const taxRate = Number(item.taxRate) || 0;
+                      return sum + (unitPrice * taxRate) / 100;
+                    },
                     0
                   )
               )}
@@ -547,8 +573,10 @@ export function InvoiceForm({
                 currency: "USD",
               }).format(
                 form.watch("items").reduce((sum, item) => {
-                  const sub = item.quantity * item.unitPrice;
-                  const tax = (sub * (item.taxRate || 0)) / 100;
+                  const unitPrice = Number(item.unitPrice) || 0;
+                  const taxRate = Number(item.taxRate) || 0;
+                  const sub = unitPrice;
+                  const tax = (sub * taxRate) / 100;
                   return sum + sub + tax;
                 }, 0)
               )}

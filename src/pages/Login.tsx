@@ -11,7 +11,7 @@ import {
   Sun,
   Loader2,
   AlertCircle,
-  Mail
+  Mail,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuthStore } from "@/stores/auth/useAuthStore";
@@ -36,109 +36,113 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  
+
   // Get theme and auth state
   const { theme, setTheme } = useTheme();
-  const { isAuthenticated, _hasHydrated, setAuth, setLoading, setError } = useAuthStore();
-  const from = location.state?.from?.pathname || '/dashboard';
-  
+  const { isAuthenticated, _hasHydrated, setAuth, setLoading, setError } =
+    useAuthStore();
+  const from = location.state?.from?.pathname || "/dashboard";
+
   // Toggle theme function
   const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
+    setTheme(theme === "dark" ? "light" : "dark");
   };
 
   // Form state
   const [formData, setFormData] = useState<LoginFormData>({
-    email: '',
-    password: ''
+    email: "",
+    password: "",
   });
-  
+
   // Local state
   const [isLoading, setIsLoading] = useState(false);
   const [error, setErrorState] = useState<string | null>(null);
 
   // Redirect if already authenticated
   useEffect(() => {
-    console.log('Login redirect check:', {
-      isAuthenticated,
-      isLoading,
-      hasFormDataEmail: !!formData.email,
-      _hasHydrated,
-      from,
-      currentPath: window.location.pathname
-    });
-    
     // Only redirect if we're certain the user is authenticated
     // and we're not in the middle of a login attempt
     // and hydration is complete
     // and we're not already at the login page (prevent redirect loop)
-    if (isAuthenticated && !isLoading && !formData.email && _hasHydrated && from !== '/login') {
-      console.log('Already authenticated, redirecting to:', from);
+    if (
+      isAuthenticated &&
+      !isLoading &&
+      !formData.email &&
+      _hasHydrated &&
+      from !== "/login"
+    ) {
       navigate(from, { replace: true });
     }
-  }, [isAuthenticated, navigate, from, isLoading, formData.email, _hasHydrated]);
+  }, [
+    isAuthenticated,
+    navigate,
+    from,
+    isLoading,
+    formData.email,
+    _hasHydrated,
+  ]);
 
   // Handle form input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
-  setIsLoading(true);
-  setErrorState(null);
-  
-  try {
-    console.log('Sending login request with:', formData);
-    const response = await authService.login(formData);
-    console.log('Login response:', response);
-    
-    if (!response.data) {
-      throw new Error('No data received in response');
-    }
+    e.preventDefault();
+    setLoading(true);
+    setIsLoading(true);
+    setErrorState(null);
 
-    const { user, accessToken, refreshToken } = response.data;
-    const tokens = { accessToken, refreshToken };
-    
-    if (!user || !accessToken) {
-      throw new Error('Invalid response format: missing user or access token');
-    }
+    try {
+      const response = await authService.login(formData);
 
-    console.log('Setting auth with:', { user, tokens });
-    setAuth(user, tokens);
-    
-    toast({
-      title: "Login successful",
-      description: `Welcome back, ${user.fName || 'User'}!`,
-    });
-    
-    navigate(from, { replace: true });
-  } catch (error: any) {
-    console.error('Login error details:', {
-      message: error.message,
-      response: error.response?.data,
-      stack: error.stack
-    });
-    
-    const errorMessage = error.response?.data?.message || error.message || "Login failed";
-    setErrorState(errorMessage);
-    
-    toast({
-      title: "Login failed",
-      description: errorMessage,
-      variant: "destructive",
-    });
-  } finally {
-    setLoading(false);
-    setIsLoading(false);
-  }  
-};
+      if (!response.data) {
+        throw new Error("No data received in response");
+      }
+
+      const { user, accessToken, refreshToken } = response.data;
+      const tokens = { accessToken, refreshToken };
+
+      if (!user || !accessToken) {
+        throw new Error(
+          "Invalid response format: missing user or access token"
+        );
+      }
+
+      setAuth(user, tokens);
+
+      toast({
+        title: "Login successful",
+        description: `Welcome back, ${user.fName || "User"}!`,
+      });
+
+      navigate(from, { replace: true });
+    } catch (error: any) {
+      console.error("Login error details:", {
+        message: error.message,
+        response: error.response?.data,
+        stack: error.stack,
+      });
+
+      const errorMessage =
+        error.response?.data?.message || error.message || "Login failed";
+      setErrorState(errorMessage);
+
+      toast({
+        title: "Login failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background relative">
@@ -229,9 +233,9 @@ const Login = () => {
             <CardContent className="p-6 sm:p-8 space-y-6">
               <div className="flex justify-center">
                 <div className="p-1.5 bg-gradient-to-br from-primary/10 to-transparent rounded-xl shadow-[0_4px_20px_-5px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_25px_-5px_rgba(0,0,0,0.3)]">
-                  <img 
-                    src={navLogo} 
-                    alt="Xrt-tech" 
+                  <img
+                    src={navLogo}
+                    alt="Xrt-tech"
                     className="w-44 rounded-lg object-contain shadow-sm"
                   />
                 </div>
@@ -284,8 +288,8 @@ const Login = () => {
                     />
                   </div>
                 </div>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   className="w-full mt-6"
                   disabled={isLoading}
                 >
@@ -295,7 +299,7 @@ const Login = () => {
                       Signing in...
                     </>
                   ) : (
-                    'Sign In'
+                    "Sign In"
                   )}
                 </Button>
               </form>

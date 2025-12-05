@@ -1,36 +1,45 @@
-import { motion } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { Download, RefreshCw, AlertCircle } from 'lucide-react';
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Download, RefreshCw, AlertCircle, TrendingUp } from "lucide-react";
 
 // Hooks
-import { useDashboard } from '@/hooks/useDashboard';
+import { useDashboardLogic } from "@/hooks/useDashboardLogic";
 
 // Components
-import { StatsCards } from '@/components/dashboard/StatsCards';
-import { LineChart, BarChart, DoughnutChart } from '@/components/ui/charts';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import ErrorBoundary from '@/components/common/ErrorBoundary';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { SubscriberCharts } from '@/components/charts/SubscriberCharts';
+import { StatsCards } from "@/components/dashboard/StatsCards";
+import { LineChart, BarChart, DoughnutChart } from "@/components/ui/charts";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { SubscriberCharts } from "@/components/charts/SubscriberCharts";
 
 const Dashboard = () => {
   const {
     // Data
     stats,
-    chartData,
-    activities,
-    
+    recentActivities,
+    revenueChartData,
+    usersGrowthData,
+    pendingUsers,
+    pendingServiceRequests,
+    pendingPlanRequests,
+
     // Loading and error states
     isLoading,
     error,
     refetch,
-    
+
     // User info
     isAdmin,
-  } = useDashboard({ includeAdminData: true });
+  } = useDashboardLogic();
 
   // Handle refresh
   const handleRefresh = () => {
@@ -39,44 +48,42 @@ const Dashboard = () => {
 
   // Handle export
   const handleExport = () => {
-    // This is a simplified export - you can enhance it as needed
-    const dataStr = JSON.stringify({ stats, activities }, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
-    const exportName = `dashboard-export-${new Date().toISOString().split('T')[0]}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportName);
+    const dataStr = JSON.stringify({ stats, recentActivities }, null, 2);
+    const dataUri =
+      "data:application/json;charset=utf-8," + encodeURIComponent(dataStr);
+
+    const exportName = `dashboard-export-${
+      new Date().toISOString().split("T")[0]
+    }.json`;
+
+    const linkElement = document.createElement("a");
+    linkElement.setAttribute("href", dataUri);
+    linkElement.setAttribute("download", exportName);
     linkElement.click();
   };
 
   // Error state
   if (error) {
     return (
-      <div className="p-6 space-y-4">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <div className="flex space-x-2">
-            <Button variant="outline" onClick={handleRefresh}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Retry
-            </Button>
-            {isAdmin && (
-              <Button variant="outline" onClick={handleExport}>
-                <Download className="mr-2 h-4 w-4" />
-                Export Data
-              </Button>
-            )}
-          </div>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4 text-center">
+        <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-lg max-w-md w-full">
+          <h2 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2">
+            Error Loading Dashboard
+          </h2>
+          <p className="text-red-500 dark:text-red-400 mb-4">
+            {error instanceof Error
+              ? error.message
+              : "An unknown error occurred"}
+          </p>
+          <Button
+            variant="outline"
+            onClick={handleRefresh}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Try Again
+          </Button>
         </div>
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error loading dashboard</AlertTitle>
-          <AlertDescription>
-            {error.message || 'Failed to load dashboard data. Please try again.'}
-          </AlertDescription>
-        </Alert>
       </div>
     );
   }
@@ -95,37 +102,16 @@ const Dashboard = () => {
             <Skeleton className="h-10 w-24" />
           </div>
         </div>
-        
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-32 rounded-lg" />
           ))}
         </div>
-        
+
         <div className="grid gap-6 md:grid-cols-2">
           <Skeleton className="h-80 rounded-lg" />
           <Skeleton className="h-80 rounded-lg" />
-        </div>
-        
-        <div className="grid gap-6">
-          <Skeleton className="h-80 rounded-lg" />
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4 text-center">
-        <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-lg max-w-md w-full">
-          <h2 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2">Error Loading Dashboard</h2>
-          <p className="text-red-500 dark:text-red-400 mb-4">
-            {error instanceof Error ? error.message : 'An unknown error occurred'}
-          </p>
-          <Button variant="outline" onClick={handleRefresh} className="flex items-center gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Try Again
-          </Button>
         </div>
       </div>
     );
@@ -133,26 +119,66 @@ const Dashboard = () => {
 
   // Prepare client distribution data
   const clientDistribution = {
-    labels: ['Active Users', 'Active Subscribers', 'Total Clients'],
+    labels: ["Active Users", "Active Subscribers", "Total Clients"],
     datasets: [
       {
         data: [
           stats?.activeUsers || 0,
-          stats?.activeSubscriptions || 0,
-          stats?.totalClients || 0
+          stats?.activePlans || 0,
+          stats?.totalClients || 0,
         ],
         backgroundColor: [
-          'rgba(16, 185, 129, 0.8)',  // Active Users - green
-          'rgba(59, 130, 246, 0.8)',  // Active Subscribers - blue
-          'rgba(139, 92, 246, 0.8)'   // Total Clients - purple
+          "rgba(16, 185, 129, 0.8)", // Active Users - green
+          "rgba(59, 130, 246, 0.8)", // Active Subscribers - blue
+          "rgba(139, 92, 246, 0.8)", // Total Clients - purple
         ],
         borderWidth: 1,
       },
     ],
   };
 
+  // Prepare revenue chart data
+  const revenueChart = {
+    labels: revenueChartData.map((d) => d.month),
+    datasets: [
+      {
+        label: "Revenue",
+        data: revenueChartData.map((d) => d.revenue),
+        borderColor: "rgb(139, 92, 246)",
+        backgroundColor: "rgba(139, 92, 246, 0.5)",
+        yAxisID: "y",
+      },
+      {
+        label: "Active Clients",
+        data: revenueChartData.map((d) => d.clients),
+        borderColor: "rgb(16, 185, 129)",
+        backgroundColor: "rgba(16, 185, 129, 0.5)",
+        yAxisID: "y1",
+      },
+    ],
+  };
+
+  // Prepare growth chart data
+  const usersGrowthChart = {
+    labels: usersGrowthData.map((d) => d.month),
+    datasets: [
+      {
+        label: "Subscribers",
+        data: usersGrowthData.map((d) => d.subscribers),
+        borderColor: "rgb(59, 130, 246)",
+        backgroundColor: "rgba(59, 130, 246, 0.5)",
+      },
+      {
+        label: "Clients",
+        data: usersGrowthData.map((d) => d.clients),
+        borderColor: "rgb(139, 92, 246)",
+        backgroundColor: "rgba(139, 92, 246, 0.5)",
+      },
+    ],
+  };
+
   return (
-    <motion.div 
+    <motion.div
       className="space-y-6 p-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -179,66 +205,35 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Cards */}
-      <StatsCards stats={stats} isLoading={isLoading} />
+      <StatsCards
+        stats={stats}
+        isAdmin={isAdmin}
+        pendingUsersCount={pendingUsers.length}
+        pendingServiceRequestsCount={pendingServiceRequests.length}
+        pendingPlanRequestsCount={pendingPlanRequests.length}
+        isLoading={isLoading}
+      />
 
       {/* Main Charts */}
-      <Tabs 
-        defaultValue="overview" 
-        className="space-y-4"
-        onValueChange={(value) => console.log('Tab changed to:', value)}
-      >
+      <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="revenue">Revenue</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="tickets">Tickets</TabsTrigger>
+          <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="subscribers">Subscribers</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Client Distribution */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Client Distribution</CardTitle>
-                <CardDescription>Breakdown of clients by status</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px] flex items-center justify-center">
-                  <DoughnutChart 
-                    data={clientDistribution}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          position: 'right',
-                        },
-                        tooltip: {
-                          callbacks: {
-                            label: (context) => {
-                              const label = context.label || '';
-                              const value = context.raw as number;
-                              const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-                              const percentage = Math.round((value / total) * 100);
-                              return `${label}: ${value} (${percentage}%)`;
-                            },
-                          },
-                        },
-                      },
-                    }}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Revenue Overview */}
-            <Card>
+            <Card className="col-span-1">
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle>Revenue Overview</CardTitle>
-                    <CardDescription>Monthly revenue and user growth</CardDescription>
+                    <CardDescription>
+                      Monthly revenue and user growth
+                    </CardDescription>
                   </div>
                   <Badge variant="outline" className="ml-2">
                     {new Date().getFullYear()}
@@ -246,58 +241,106 @@ const Dashboard = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <LineChart 
-                  data={chartData.revenue} 
+                <LineChart
+                  data={revenueChart}
                   options={{
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: {
-                      mode: 'index',
+                      mode: "index",
                       intersect: false,
                     },
                     scales: {
                       y: {
-                        type: 'linear',
+                        type: "linear",
                         display: true,
-                        position: 'left',
+                        position: "left",
                         title: {
                           display: true,
-                          text: 'Revenue ($)'
-                        },
-                        grid: {
-                          drawOnChartArea: false,
+                          text: "Revenue ($)",
                         },
                       },
                       y1: {
-                        type: 'linear',
+                        type: "linear",
                         display: true,
-                        position: 'right',
+                        position: "right",
                         grid: {
                           drawOnChartArea: false,
                         },
                         title: {
                           display: true,
-                          text: 'Active Users'
-                        }
+                          text: "Active Clients",
+                        },
                       },
                     },
-                  }} 
-                  height={280} 
+                  }}
+                  height={300}
                 />
+              </CardContent>
+            </Card>
+
+            {/* Most Subscribed Plans */}
+            <Card className="col-span-1">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  <CardTitle>Most Subscribed Plans</CardTitle>
+                </div>
+                <CardDescription>
+                  Top performing subscription plans
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {stats.mostSubscribedPlans &&
+                  stats.mostSubscribedPlans.length > 0 ? (
+                    stats.mostSubscribedPlans.map((plan, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-sm">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <p className="font-medium">{plan.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              ${plan.monthlyRevenue?.toLocaleString()}/mo MRR
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold">{plan.count}</p>
+                          <p className="text-xs text-muted-foreground">
+                            subscribers
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No subscription data available yet.
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
             {/* User Growth */}
+            {/* Client & Subscriber Growth */}
             <Card>
               <CardHeader>
-                <CardTitle>User Growth</CardTitle>
-                <CardDescription>New users and clients over time</CardDescription>
+                <CardTitle>Client & Subscriber Growth</CardTitle>
+                <CardDescription>
+                  New clients and subscribers over time
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <LineChart 
-                  data={chartData.usersGrowth} 
+                <LineChart
+                  data={usersGrowthChart}
                   options={{
                     responsive: true,
                     maintainAspectRatio: false,
@@ -306,52 +349,45 @@ const Dashboard = () => {
                         beginAtZero: true,
                         title: {
                           display: true,
-                          text: 'Count'
-                        }
+                          text: "Count",
+                        },
                       },
                       x: {
                         title: {
                           display: true,
-                          text: 'Month'
-                        }
-                      }
+                          text: "Month",
+                        },
+                      },
                     },
-                  }} 
-                  height={280} 
+                  }}
+                  height={300}
                 />
               </CardContent>
             </Card>
 
-            {/* Tickets Status */}
+            {/* Client Distribution */}
             <Card>
               <CardHeader>
-                <CardTitle>Tickets Status</CardTitle>
-                <CardDescription>Weekly ticket resolution</CardDescription>
+                <CardTitle>Client Distribution</CardTitle>
+                <CardDescription>
+                  Breakdown of clients by status
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <BarChart 
-                  data={chartData.tickets} 
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                      y: {
-                        beginAtZero: true,
-                        title: {
-                          display: true,
-                          text: 'Number of Tickets'
-                        }
+                <div className="h-[300px] flex items-center justify-center">
+                  <DoughnutChart
+                    data={clientDistribution}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          position: "right",
+                        },
                       },
-                      x: {
-                        title: {
-                          display: true,
-                          text: 'Week'
-                        }
-                      }
-                    },
-                  }} 
-                  height={280} 
-                />
+                    }}
+                  />
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -361,71 +397,76 @@ const Dashboard = () => {
           <Card>
             <CardHeader>
               <CardTitle>Revenue Analytics</CardTitle>
-              <CardDescription>Detailed revenue metrics and trends</CardDescription>
+              <CardDescription>
+                Detailed revenue metrics and trends
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <LineChart 
-                data={chartData.revenue} 
+              <LineChart
+                data={revenueChart}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
                   plugins: {
                     title: {
                       display: true,
-                      text: 'Monthly Revenue vs. Active Users',
+                      text: "Monthly Revenue vs. Active Clients",
                     },
                   },
                   interaction: {
-                    mode: 'index',
+                    mode: "index",
                     intersect: false,
                   },
                   scales: {
                     y: {
-                      type: 'linear',
+                      type: "linear",
                       display: true,
-                      position: 'left',
+                      position: "left",
                       title: {
                         display: true,
-                        text: 'Revenue ($)'
+                        text: "Revenue ($)",
                       },
                     },
                     y1: {
-                      type: 'linear',
+                      type: "linear",
                       display: true,
-                      position: 'right',
+                      position: "right",
                       grid: {
                         drawOnChartArea: false,
                       },
                       title: {
                         display: true,
-                        text: 'Active Users'
-                      }
+                        text: "Active Clients",
+                      },
                     },
                   },
-                }} 
-                height={400} 
+                }}
+                height={400}
               />
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="users" className="space-y-6">
+        <TabsContent value="clients" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
+            {/* Client & Subscriber Growth */}
             <Card>
               <CardHeader>
-                <CardTitle>User Growth</CardTitle>
-                <CardDescription>New users and clients over time</CardDescription>
+                <CardTitle>Client & Subscriber Growth</CardTitle>
+                <CardDescription>
+                  New clients and subscribers over time
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <LineChart 
-                  data={chartData.usersGrowth} 
+                <LineChart
+                  data={usersGrowthChart}
                   options={{
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
                       title: {
                         display: true,
-                        text: 'Monthly User Growth',
+                        text: "Monthly Growth",
                       },
                     },
                     scales: {
@@ -433,18 +474,18 @@ const Dashboard = () => {
                         beginAtZero: true,
                         title: {
                           display: true,
-                          text: 'Number of Users'
-                        }
+                          text: "Count",
+                        },
                       },
                       x: {
                         title: {
                           display: true,
-                          text: 'Month'
-                        }
-                      }
+                          text: "Month",
+                        },
+                      },
                     },
-                  }} 
-                  height={350} 
+                  }}
+                  height={350}
                 />
               </CardContent>
             </Card>
@@ -452,11 +493,13 @@ const Dashboard = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Client Distribution</CardTitle>
-                <CardDescription>Breakdown of clients by status</CardDescription>
+                <CardDescription>
+                  Breakdown of clients by status
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-[350px] flex items-center justify-center">
-                  <DoughnutChart 
+                  <DoughnutChart
                     data={clientDistribution}
                     options={{
                       responsive: true,
@@ -464,21 +507,10 @@ const Dashboard = () => {
                       plugins: {
                         title: {
                           display: true,
-                          text: 'Client Status Distribution',
+                          text: "Client Status Distribution",
                         },
                         legend: {
-                          position: 'right',
-                        },
-                        tooltip: {
-                          callbacks: {
-                            label: (context) => {
-                              const label = context.label || '';
-                              const value = context.raw as number;
-                              const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-                              const percentage = Math.round((value / total) * 100);
-                              return `${label}: ${value} (${percentage}%)`;
-                            },
-                          },
+                          position: "right",
                         },
                       },
                     }}
@@ -489,51 +521,10 @@ const Dashboard = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="tickets" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Ticket Analytics</CardTitle>
-              <CardDescription>Ticket status and resolution trends</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BarChart 
-                data={chartData.tickets} 
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    title: {
-                      display: true,
-                      text: 'Weekly Ticket Status',
-                    },
-                  },
-                  scales: {
-                    y: {
-                      beginAtZero: true,
-                      title: {
-                        display: true,
-                        text: 'Number of Tickets'
-                      }
-                    },
-                    x: {
-                      title: {
-                        display: true,
-                        text: 'Week'
-                      }
-                    }
-                  },
-                }} 
-                height={400} 
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="subscribers" className="space-y-6">
           <SubscriberCharts />
         </TabsContent>
       </Tabs>
-
     </motion.div>
   );
 };

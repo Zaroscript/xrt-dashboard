@@ -114,18 +114,12 @@ const AppRoutes = () => {
 function App() {
   const { isReady } = useAuthInit();
 
-  console.log("=== APP RENDER ===");
-  console.log("App render: isReady =", isReady);
 
   // Show loader while auth is initializing
   if (!isReady) {
-    console.log("--- APP: SHOWING LOADER ---");
-    console.log("App: Showing FullPageLoader because !isReady");
     return <FullPageLoader />;
   }
 
-  console.log("--- APP: RENDERING ROUTES ---");
-  console.log("App: Rendering app routes");
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter

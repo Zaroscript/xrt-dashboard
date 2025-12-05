@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { StateStorage, persist, createJSONStorage } from 'zustand/middleware';
+import { create } from "zustand";
+import { StateStorage, persist, createJSONStorage } from "zustand/middleware";
 
 /**
  * Custom storage implementation that can be used with persist middleware
@@ -32,23 +32,25 @@ export const createCustomStorage = (storage: Storage): StateStorage => ({
 /**
  * Middleware for logging store actions in development
  */
-export const logger = <T>(config: any) => (set: any, get: any, api: any) =>
-  config(
-    (args: any) => {
-      if (process.env.NODE_ENV === 'development') {
-        console.group('Store Update');
-        console.log('Previous State:', get());
-        console.log('Action:', args);
-        set(args);
-        console.log('Next State:', get());
-        console.groupEnd();
-      } else {
-        set(args);
-      }
-    },
-    get,
-    api
-  );
+export const logger =
+  <T>(config: any) =>
+  (set: any, get: any, api: any) =>
+    config(
+      (args: any) => {
+        if (process.env.NODE_ENV === "development") {
+          // console.group('Store Update');
+          // console.log('Previous State:', get());
+          // console.log('Action:', args);
+          set(args);
+          // console.log('Next State:', get());
+          // console.groupEnd();
+        } else {
+          set(args);
+        }
+      },
+      get,
+      api
+    );
 
 /**
  * Helper to create a store with common middleware
@@ -73,13 +75,13 @@ export const createStore = <T extends object>(
   let storeConfig = config;
 
   // Add devtools in development
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === "development") {
     storeConfig = (set: any, get: any, api: any) =>
       config(
         (args: any) => {
           set(args);
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`[${name}] State Update:`, get());
+          if (process.env.NODE_ENV === "development") {
+            // console.log(`[${name}] State Update:`, get());
           }
         },
         get,

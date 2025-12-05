@@ -12,5 +12,5 @@ export { useServiceRequestsStore } from './service-requests/useServiceRequestsSt
 export { usePlanRequestsStore } from './plan-requests/usePlanRequestsStore';
 export { useSubscribersStore } from './subscribers/useSubscribersStore';
 export { useProjectsStore } from './projects/useProjectsStore';
-export type { User, Tokens } from './types';
+export type { User } from './types';
 export * from './types';

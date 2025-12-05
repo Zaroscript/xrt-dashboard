@@ -9,12 +9,44 @@ import {
   Activity,
 } from "lucide-react";
 import { type Client } from "@/stores/clients/useClientsStore";
+import { useState, useEffect } from "react";
+import { getInvoices } from "@/services/invoiceService";
+import { Invoice } from "@/types/invoice.types";
 
 interface ClientMetricsProps {
   client: Client;
 }
 
 export function ClientMetrics({ client }: ClientMetricsProps) {
+  const [clientValue, setClientValue] = useState<number>(0);
+  const [isLoadingValue, setIsLoadingValue] = useState(true);
+
+  useEffect(() => {
+    calculateClientValue();
+  }, [client._id]);
+
+  const calculateClientValue = async () => {
+    try {
+      setIsLoadingValue(true);
+      // Fetch all invoices for this client
+      const allInvoices = await getInvoices({ client: client._id });
+      // Calculate total from paid invoices only
+      const paidInvoices = allInvoices.filter(
+        (inv: Invoice) => inv.status === "paid"
+      );
+      const totalValue = paidInvoices.reduce(
+        (sum: number, inv: Invoice) => sum + (inv.total || 0),
+        0
+      );
+      setClientValue(totalValue);
+    } catch (error) {
+      console.error("Error calculating client value:", error);
+      // Fallback to client.revenue if available
+      setClientValue(client.revenue || 0);
+    } finally {
+      setIsLoadingValue(false);
+    }
+  };
   const getDaysSinceCreation = () => {
     const created = new Date(client.createdAt);
     const now = new Date();
@@ -38,14 +70,43 @@ export function ClientMetrics({ client }: ClientMetricsProps) {
     if (!client.subscription)
       return { status: "none", label: "No Subscription", color: "secondary" };
 
-    const expiresAt = new Date(client.subscription.expiresAt);
-    const now = new Date();
-    const daysUntilExpiry = Math.ceil(
-      (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
     if (client.subscription.status !== "active") {
       return { status: "inactive", label: "Inactive", color: "destructive" };
+    }
+
+    // Check if expiresAt or endDate exists and is valid
+    const endDate = client.subscription.expiresAt || client.subscription.endDate;
+    if (!endDate) {
+      return {
+        status: "healthy",
+        label: "Active",
+        color: "default",
+      };
+    }
+
+    const expiryDate = new Date(endDate);
+    const now = new Date();
+    
+    // Check if date is valid
+    if (isNaN(expiryDate.getTime())) {
+      return {
+        status: "healthy",
+        label: "Active",
+        color: "default",
+      };
+    }
+
+    const daysUntilExpiry = Math.ceil(
+      (expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    // Check if calculation resulted in NaN
+    if (isNaN(daysUntilExpiry)) {
+      return {
+        status: "healthy",
+        label: "Active",
+        color: "default",
+      };
     }
 
     if (daysUntilExpiry <= 7) {
@@ -72,10 +133,12 @@ export function ClientMetrics({ client }: ClientMetricsProps) {
   const metrics = [
     {
       title: "Client Value",
-      value: `$${(client.revenue || 0).toLocaleString()}`,
+      value: isLoadingValue
+        ? "Loading..."
+        : `$${clientValue.toLocaleString()}`,
       icon: <DollarSign className="w-4 h-4" />,
-      trend: (client.revenue || 0) > 1000 ? "up" : "stable",
-      description: "Total revenue",
+      trend: clientValue > 1000 ? "up" : "stable",
+      description: "Total from paid invoices",
     },
     {
       title: "Client Age",

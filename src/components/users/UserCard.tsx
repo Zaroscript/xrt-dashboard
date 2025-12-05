@@ -15,7 +15,7 @@ import {
   MapPin,
   Mail,
   Globe,
-  User,
+  User as UserIcon,
   Info,
   Briefcase,
   FileText,
@@ -37,12 +37,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import type { User } from "@/store/slices/usersSlice";
+import type { User } from "@/stores/types";
 import StatusBadge from "./StatusBadge";
-import { useState } from "react";
+import { getAvatarUrl, getUserInitials } from "@/utils/avatarUtils";
+import { useMemo, useState } from "react";
 import EditProfile from "./EditProfile";
 import SubscriptionForm from "./SubscriptionForm";
 import { RejectUserDialog } from "./RejectUserDialog";
+import { useSubscribersStore } from "@/stores/index";
 
 export const UserCard: React.FC<{
   user: User;
@@ -53,21 +55,50 @@ export const UserCard: React.FC<{
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   
+  // Get subscriber store
+  const { getSubscribersByUser, createSubscriber, approveSubscriber } = useSubscribersStore();
+  
+  // Get user's subscription data with error handling
+  const userSubscription = useMemo(() => {
+    try {
+      const subscriptions = getSubscribersByUser(user._id);
+      return subscriptions && subscriptions.length > 0 ? subscriptions[0] : null;
+    } catch (error) {
+      console.error('Error fetching subscriber data:', error);
+      return null;
+    }
+  }, [user._id, getSubscribersByUser]);
+  
   // Calculate subscription progress
   const subscriptionProgress = useMemo(() => {
-    if (!user.subscriptionStart || !user.subscriptionEnd) return 0;
+    if (!userSubscription || !userSubscription.plan?.startDate || !userSubscription.plan?.endDate) {
+      return 0;
+    }
     
-    const start = new Date(user.subscriptionStart).getTime();
-    const end = new Date(user.subscriptionEnd).getTime();
-    const now = new Date().getTime();
-    
-    if (now >= end) return 100;
-    if (now <= start) return 0;
-    
-    return Math.round(((now - start) / (end - start)) * 100);
-  }, [user.subscriptionStart, user.subscriptionEnd]);
+    try {
+      const start = new Date(userSubscription.plan.startDate);
+      const end = new Date(userSubscription.plan.endDate);
+      const now = new Date();
+      
+      // Validate dates
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return 0;
+      }
+      
+      if (now < start) return 0;
+      if (now > end) return 100;
+      
+      const total = end.getTime() - start.getTime();
+      const elapsed = now.getTime() - start.getTime();
+      
+      return Math.round((elapsed / total) * 100);
+    } catch (error) {
+      console.error('Error calculating subscription progress:', error);
+      return 0;
+    }
+  }, [userSubscription]);
   
-  // Format date helper
+  // Make dates look nice
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     try {
@@ -77,29 +108,44 @@ export const UserCard: React.FC<{
     }
   };
   
-  // Get subscription status
+  // Figure out what the subscription status should show
   const getSubscriptionStatus = () => {
-    if (!user.isSubscriber) return 'Not Subscribed';
-    if (!user.subscriptionEnd) return 'Active';
+    if (!userSubscription) {
+      return 'No subscription';
+    }
     
-    const endDate = new Date(user.subscriptionEnd);
-    const today = new Date();
-    
-    if (endDate < today) return 'Expired';
-    
-    const daysLeft = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return `Expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
+    switch (userSubscription.status) {
+      case 'active':
+        return userSubscription.plan?.status === 'active' ? 'Active' : 'Pending';
+      case 'pending_approval':
+        return 'Pending Approval';
+      case 'inactive':
+        return 'Inactive';
+      case 'suspended':
+        return 'Suspended';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'expired':
+        return 'Expired';
+      case 'rejected':
+        return 'Rejected';
+      default:
+        return 'Unknown';
+    }
   };
+  
+  // Check if user is a subscriber
+  const isSubscriber = !!userSubscription && userSubscription.status === 'active';
 
   const handleStatusChange = async (
-    newStatus: User["status"],
+    newStatus: "approved" | "rejected",
     rejectionReason?: string
   ) => {
-    await onUpdate({ ...user, status: newStatus, rejectionReason });
-  };
-
-  const handlePremiumToggle = async () => {
-    await onUpdate({ ...user, isPremium: !user.isPremium });
+    const updatedUser = { 
+      ...user, 
+      isApproved: newStatus === "approved"
+    };
+    await onUpdate(updatedUser);
   };
 
   const handleRejectWithReason = async (reason: string) => {
@@ -129,25 +175,22 @@ export const UserCard: React.FC<{
               <div className="flex items-center space-x-4">
                 <Avatar className="h-12 w-12 sm:h-16 sm:w-16 ring-4 ring-primary/10 border-2 border-background">
                   <AvatarImage
-                    src={`https://api.dicebear.com/7.x/avataars/svg?seed=${user.email}`}
+                    src={getAvatarUrl(user.avatar)}
+                    alt={`${user.fName || ''} ${user.lName || ''}`.trim() || 'User'}
                   />
                   <AvatarFallback className="bg-gold-gradient text-primary-foreground text-lg sm:text-xl">
-                    {user.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
+                    {user.initials || getUserInitials(user.fName, user.lName, user.email)}
                   </AvatarFallback>
                 </Avatar>
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-lg sm:text-xl text-foreground">
-                      {user.name}
+                      {`${user.fName} ${user.lName}`}
                     </h3>
-                    {user.isClient && (
+                    {user.role === "client" && (
                       <Crown
                         className="w-4 h-4 sm:w-5 sm:h-5 text-primary"
-                        title="Client"
                       />
                     )}
                   </div>
@@ -155,12 +198,7 @@ export const UserCard: React.FC<{
                     {user.email}
                   </p>
                   <div className="flex items-center pt-1 space-x-2">
-                    <StatusBadge status={user.status} />
-                    {user.isPremium && (
-                      <Badge variant="premium" className="text-xs">
-                        Premium
-                      </Badge>
-                    )}
+                    <StatusBadge user={user} />
                   </div>
                 </div>
               </div>
@@ -176,10 +214,10 @@ export const UserCard: React.FC<{
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="glass-card w-56">
-                  {user.status === "pending" && (
+                  {!user.isApproved && (
                     <>
                       <DropdownMenuItem
-                        onClick={() => handleStatusChange("active")}
+                        onClick={() => handleStatusChange("approved")}
                         className="text-green-600 cursor-pointer"
                       >
                         <CheckCircle className="mr-2 h-4 w-4" />
@@ -195,23 +233,23 @@ export const UserCard: React.FC<{
                     </>
                   )}
 
-                  {user.status === "active" && (
+                  {user.isApproved && !user.isActive && (
                     <DropdownMenuItem
-                      onClick={() => handleStatusChange("blocked")}
-                      className="text-red-600 cursor-pointer"
-                    >
-                      <Ban className="w-4 h-4 mr-2" />
-                      Block User
-                    </DropdownMenuItem>
-                  )}
-
-                  {user.status === "blocked" && (
-                    <DropdownMenuItem
-                      onClick={() => handleStatusChange("active")}
+                      onClick={() => onUpdate({ ...user, isActive: true })}
                       className="text-green-600 cursor-pointer"
                     >
                       <UserCheck className="w-4 h-4 mr-2" />
                       Unblock User
+                    </DropdownMenuItem>
+                  )}
+
+                  {user.isApproved && user.isActive && (
+                    <DropdownMenuItem
+                      onClick={() => onUpdate({ ...user, isActive: false })}
+                      className="text-red-600 cursor-pointer"
+                    >
+                      <Ban className="w-4 h-4 mr-2" />
+                      Block User
                     </DropdownMenuItem>
                   )}
 
@@ -228,16 +266,16 @@ export const UserCard: React.FC<{
                     className="cursor-pointer"
                   >
                     <CreditCard className="w-4 h-4 mr-2" />
-                    {user.isClient ? "Manage Subscription" : "Make Client"}
+                    {isSubscriber ? "Manage Subscription" : "Create Subscription"}
                   </DropdownMenuItem>
 
-                  {user.isClient && (
+                  {isSubscriber && (
                     <DropdownMenuItem
-                      onClick={handlePremiumToggle}
+                      onClick={() => {}}
                       className="cursor-pointer"
                     >
                       <Star className="mr-2 h-4 w-4" />
-                      {user.isPremium ? "Remove Premium" : "Make Premium"}
+                      Premium Features
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -270,47 +308,78 @@ export const UserCard: React.FC<{
                       </a>
                     </div>
                   )}
-                  {user.website && (
+                  {user.oldWebsite && (
                     <div className="flex items-center text-muted-foreground">
                       <Globe className="h-4 w-4 mr-2 flex-shrink-0" />
                       <a 
-                        href={user.website.startsWith('http') ? user.website : `https://${user.website}`} 
+                        href={user.oldWebsite.startsWith('http') ? user.oldWebsite : `https://${user.oldWebsite}`} 
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="hover:text-primary transition-colors truncate"
-                        title={user.website}
+                        title={user.oldWebsite}
                       >
-                        {user.website.replace(/^https?:\/\//, '')}
+                        {user.oldWebsite.replace(/^https?:\/\//, '')}
                       </a>
                     </div>
                   )}
-                  {user.company && (
+                  {user.companyName && (
                     <div className="flex items-center text-muted-foreground">
                       <Briefcase className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span className="truncate">{user.company}</span>
+                      <span className="truncate">{user.companyName}</span>
                     </div>
                   )}
                 </div>
               </div>
 
               {/* Subscription Status */}
-              {user.isSubscriber && (
+              {userSubscription && (
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <h4 className="text-sm font-medium text-muted-foreground flex items-center">
                       <Crown className="h-4 w-4 mr-2 text-amber-500" />
                       Subscription
                     </h4>
-                    <Badge variant={subscriptionProgress > 90 ? 'destructive' : 'outline'} className="text-xs">
+                    <Badge variant="outline" className="text-xs">
                       {getSubscriptionStatus()}
                     </Badge>
                   </div>
                   <div className="space-y-2">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Started: {formatDate(user.subscriptionStart)}</span>
-                      <span>Ends: {formatDate(user.subscriptionEnd)}</span>
-                    </div>
-                    <Progress value={subscriptionProgress} className="h-2" />
+                    {userSubscription.plan?.plan && (
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Plan:</span>
+                        <span className="text-foreground font-medium">
+                          {typeof userSubscription.plan.plan === 'string' 
+                            ? userSubscription.plan.plan 
+                            : userSubscription.plan.plan.name || 'Unknown Plan'
+                          }
+                        </span>
+                      </div>
+                    )}
+                    {userSubscription.plan?.startDate && (
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Started:</span>
+                        <span className="text-foreground font-medium">
+                          {formatDate(userSubscription.plan.startDate)}
+                        </span>
+                      </div>
+                    )}
+                    {userSubscription.plan?.endDate && (
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Expires:</span>
+                        <span className="text-foreground font-medium">
+                          {formatDate(userSubscription.plan.endDate)}
+                        </span>
+                      </div>
+                    )}
+                    {subscriptionProgress > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Progress:</span>
+                          <span className="text-foreground font-medium">{subscriptionProgress}%</span>
+                        </div>
+                        <Progress value={subscriptionProgress} className="h-2" />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -318,7 +387,7 @@ export const UserCard: React.FC<{
               {/* Account Details */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-muted-foreground flex items-center">
-                  <User className="h-4 w-4 mr-2" />
+                  <UserIcon className="h-4 w-4 mr-2" />
                   Account Details
                 </h4>
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -328,7 +397,9 @@ export const UserCard: React.FC<{
                   </div>
                   <div className="flex flex-col">
                     <span className="text-xs text-muted-foreground">Status</span>
-                    <StatusBadge status={user.status} />
+                    <span className="font-medium">
+                      {user.isApproved ? (user.isActive ? "Active" : "Blocked") : "Pending"}
+                    </span>
                   </div>
                   <div className="flex flex-col">
                     <span className="text-xs text-muted-foreground">Member Since</span>
@@ -337,7 +408,7 @@ export const UserCard: React.FC<{
                   <div className="flex flex-col">
                     <span className="text-xs text-muted-foreground">Last Active</span>
                     <span className="font-medium">
-                      {user.lastActive ? format(new Date(user.lastActive), 'MMM d, yyyy') : 'N/A'}
+                      {user.updatedAt ? format(new Date(user.updatedAt), 'MMM d, yyyy') : 'N/A'}
                     </span>
                   </div>
                 </div>
@@ -408,104 +479,7 @@ export const UserCard: React.FC<{
                 </AnimatePresence>
               </div>
             </div>
-            <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm border-t border-border/10 pt-4">
-              <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                <Calendar className="w-4 h-4" />
-                <span>Joined:</span>
-                <span className="text-foreground font-medium">
-                  {new Date(user.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-              <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                <Clock className="w-4 h-4" />
-                <span>Last Active:</span>
-                <span className="text-foreground font-medium">
-                  {new Date(user.lastActive).toLocaleDateString()}
-                </span>
-              </div>
-            </div>
-
-            <AnimatePresence>
-              {isExpanded && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-4 pt-4 border-t border-border/10"
-                >
-                  <div className="space-y-3 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Phone className="w-4 h-4" />
-                      <span>Phone:</span>
-                      <span className="text-foreground font-medium">
-                        {user.phoneNumber}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <MapPin className="w-4 h-4" />
-                      <span>Location:</span>
-                      <span className="text-foreground font-medium">
-                        {user.businessLocation}
-                      </span>
-                    </div>
-                    {user.websites && user.websites.length > 0 && (
-                      <div className="flex items-start gap-2 text-muted-foreground">
-                        <LinkIcon className="w-4 h-4 mt-1" />
-                        <span>Websites:</span>
-                        <div className="flex flex-col space-y-1">
-                          {user.websites.map((site, index) => (
-                            <a
-                              key={index}
-                              href={site}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline font-medium break-all"
-                            >
-                              {site}
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Crown className="w-4 h-4" />
-                      <span>Role:</span>
-                      <span className="text-foreground font-medium capitalize">
-                        {user.role}
-                      </span>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div className="mt-4 text-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="w-full"
-              >
-                <motion.div
-                  animate={{ rotate: isExpanded ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronDown className="w-4 h-4" />
-                </motion.div>
-                <span className="ml-2">
-                  {isExpanded ? "Show Less" : "Show More"}
-                </span>
-              </Button>
-            </div>
-
-            {user.rejectionReason && (
-              <div className="mt-4 p-3 bg-red-900/10 rounded-lg border border-red-900/20">
-                <p className="text-sm text-red-500">
-                  <strong className="font-medium">Rejection Reason:</strong>{" "}
-                  {user.rejectionReason}
-                </p>
-              </div>
-            )}
+            
           </CardContent>
         </Card>
       </motion.div>
@@ -533,10 +507,10 @@ export const UserCard: React.FC<{
       </AnimatePresence>
 
       <RejectUserDialog
-        user={user}
         open={isRejectDialogOpen}
         onOpenChange={setIsRejectDialogOpen}
-        onSuccess={() => setIsRejectDialogOpen(false)}
+        onConfirm={handleRejectWithReason}
+        userName={`${user.fName} ${user.lName}`}
       />
     </>
   );

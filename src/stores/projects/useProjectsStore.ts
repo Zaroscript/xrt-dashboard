@@ -190,27 +190,22 @@ export const useProjectsStore = create<ProjectsStore>()(
 
       updatePriority: async (id, priority) => {
         // Note: priority field not in Project interface - would need backend model update
-        console.log('updatePriority functionality requires backend model update');
       },
 
       assignTeam: async (id, teamMembers) => {
         // Note: team field not in Project interface - would need backend model update
-        console.log('assignTeam functionality requires backend model update');
       },
 
       updateProgress: async (id, progress) => {
         // Note: progress field not in Project interface - would need backend model update
-        console.log('updateProgress functionality requires backend model update');
       },
 
       addMilestone: async (id, milestone) => {
         // Note: milestones field not in Project interface - would need backend model update
-        console.log('addMilestone functionality requires backend model update');
       },
 
       updateBudget: async (id, budget) => {
         // Note: budget field not in Project interface - would need backend model update
-        console.log('updateBudget functionality requires backend model update');
       },
 
       completeProject: async (id) => {

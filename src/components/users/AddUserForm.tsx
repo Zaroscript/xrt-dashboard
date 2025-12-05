@@ -244,8 +244,6 @@ export const AddClientForm = ({ onSuccess, onCancel, onFormStateChange }: AddCli
   }) as boolean;
 
   const onSubmit = async (values: FormValues) => {
-    console.log('Form submitted with values:', values);
-    
     // Manually validate required fields
     const requiredFields = ['firstName', 'lastName', 'email', 'phoneNumber'];
     const missingFields = requiredFields.filter(field => !values[field as keyof FormValues]);
@@ -290,10 +288,7 @@ export const AddClientForm = ({ onSuccess, onCancel, onFormStateChange }: AddCli
         currentPlan: undefined,
       };
 
-      console.log('Creating client with data:', clientData);
-      
       const result = await createClient(clientData).unwrap();
-      console.log('Client created successfully:', result);
 
       toast({
         title: 'Client created',
@@ -304,7 +299,6 @@ export const AddClientForm = ({ onSuccess, onCancel, onFormStateChange }: AddCli
       form.reset();
 
       if (onSuccess) {
-        console.log('Calling onSuccess callback');
         onSuccess();
       }
     } catch (error: any) {
@@ -323,7 +317,6 @@ export const AddClientForm = ({ onSuccess, onCancel, onFormStateChange }: AddCli
         variant: 'destructive',
       });
     } finally {
-      console.log('Form submission complete');
       setIsSubmitting(false);
     }
   };

@@ -4,11 +4,15 @@ import { adminService } from '@/services/api/adminService';
 
 export interface Moderator {
   _id: string;
-  fName: string;
-  lName: string;
+  fName?: string;
+  lName?: string;
+  name?: string; // Alternative to fName/lName
   email: string;
-  createdAt: string;
+  createdAt?: string;
   plainPassword?: string;
+  role?: string;
+  isActive?: boolean;
+  isApproved?: boolean;
 }
 
 interface SettingsStore {
@@ -40,15 +44,40 @@ const useSettingsStore = create<SettingsStore>()(
         set({ isLoadingModerators: true, moderatorError: null });
         try {
           const moderators = await adminService.getModerators();
-          console.log('Fetched moderators:', moderators);
-          console.log('First moderator plainPassword:', moderators[0]?.plainPassword);
-          set({ moderators, isLoadingModerators: false });
+          
+          // Ensure we always set an array, even if API returns unexpected data
+          const moderatorsArray = Array.isArray(moderators) ? moderators : [];
+          
+          // Validate moderator objects have required fields
+          const validatedModerators = moderatorsArray.map(mod => ({
+            _id: mod._id || '',
+            fName: mod.fName || mod.name?.split(' ')[0] || '',
+            lName: mod.lName || mod.name?.split(' ').slice(1).join(' ') || '',
+            email: mod.email || '',
+            createdAt: mod.createdAt || new Date().toISOString(),
+            plainPassword: mod.plainPassword
+          })).filter(mod => mod._id && mod.email); // Only keep valid moderators
+          
+          set({ moderators: validatedModerators, isLoadingModerators: false });
         } catch (error: any) {
           console.error('Failed to fetch moderators:', error);
-          set({ 
-            isLoadingModerators: false, 
-            moderatorError: error.response?.data?.message || 'Failed to fetch moderators' 
-          });
+          console.error('Error details:', error.response?.data || error.message);
+          console.error('Error status:', error.response?.status);
+          
+          // Handle 403 errors specifically
+          if (error.response?.status === 403) {
+            set({ 
+              moderators: [],
+              isLoadingModerators: false, 
+              moderatorError: 'You do not have permission to access moderator management. Super admin privileges required.' 
+            });
+          } else {
+            set({ 
+              moderators: [],
+              isLoadingModerators: false, 
+              moderatorError: error.response?.data?.message || error.message || 'Failed to fetch moderators' 
+            });
+          }
         }
       },
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   CreditCard,
@@ -15,6 +15,8 @@ import {
 import { clientsService } from "@/services/api/clientsService";
 import { useToast } from "@/components/ui/use-toast";
 import { UpdateSubscriptionDialog } from "@/components/clients/UpdateSubscriptionDialog";
+import { AssignSubscriptionDialog } from "@/components/clients/AssignSubscriptionDialog";
+import { ChangePlanDialog } from "@/components/clients/ChangePlanDialog";
 
 interface SubscriptionData {
   _id: string;
@@ -29,7 +31,7 @@ interface SubscriptionData {
   customPrice?: number;
   discount?: number;
   startDate: string;
-  endDate: string;
+  expiresAt: string;
 }
 
 interface SubscriptionCardProps {
@@ -37,6 +39,9 @@ interface SubscriptionCardProps {
   subscription: SubscriptionData | null;
   onUpdate?: () => void;
   onChangePlan?: () => void;
+  client?: any; // Client object for AssignSubscriptionDialog
+  showAssignDialog?: boolean; // Controlled state from parent
+  onShowAssignDialogChange?: (open: boolean) => void; // Callback to update parent state
 }
 
 export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
@@ -44,13 +49,19 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
   subscription,
   onUpdate,
   onChangePlan,
+  client,
 }) => {
   const [showRenewDialog, setShowRenewDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [showChangePlanDialog, setShowChangePlanDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   const [renewMonths, setRenewMonths] = useState<number>(1);
   const { toast } = useToast();
+
+  // Memoize client to prevent unnecessary remounts of the dialog
+  const stableClient = useMemo(() => client, [client?._id]);
 
   const handleRenew = async () => {
     if (!subscription) return;
@@ -115,16 +126,39 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
   };
 
   const calculateDaysRemaining = () => {
-    if (!subscription) return 0;
+    if (!subscription) return null;
+
+    // Use endDate or expiresAt, whichever is available
+    const endDate = subscription.expiresAt;
+    if (!endDate) return null;
+
     const now = new Date();
-    const end = new Date(subscription.endDate);
+    const end = new Date(endDate);
+
+    // Check if date is valid
+    if (isNaN(end.getTime())) return null;
+
     const diffTime = end.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Check if calculation resulted in NaN
+    if (isNaN(diffDays)) return null;
+
     return diffDays;
   };
 
   const calculateNextBillingDate = () => {
     if (!subscription) return null;
+
+    // If we have an expiration date, that is the next billing date (renewal date)
+    if (subscription.expiresAt) {
+      const expiresAt = new Date(subscription.expiresAt);
+      // Ensure we return the date object if valid
+      if (!isNaN(expiresAt.getTime())) {
+        return expiresAt;
+      }
+    }
+
     const start = new Date(subscription.startDate);
     const now = new Date();
 
@@ -173,18 +207,6 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
         <div className="text-center py-8">
           <Info className="w-12 h-12 text-gray-600 mx-auto mb-3" />
           <p className="text-gray-400 mb-4">No active subscription</p>
-
-          {onChangePlan && (
-            <button
-              type="button"
-              onClick={onChangePlan}
-              className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground 
-                       rounded-lg transition-colors font-medium inline-flex items-center gap-2"
-            >
-              <CreditCard className="w-4 h-4" />
-              Assign Plan
-            </button>
-          )}
         </div>
       </div>
     );
@@ -257,7 +279,7 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
               </div>
             )}
 
-            {hasDiscount && (
+            {hasDiscount ? (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground flex items-center gap-1">
                   <Percent className="w-3 h-3" />
@@ -265,6 +287,16 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
                 </span>
                 <span className="text-green-400">
                   {subscription.discount}% off
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Percent className="w-3 h-3" />
+                  Discount
+                </span>
+                <span className="text-muted-foreground/60">
+                  No discount
                 </span>
               </div>
             )}
@@ -291,28 +323,38 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
-              End Date
-            </span>
-            <div className="flex flex-col items-end">
-              <span className="font-medium">
-                {new Date(subscription.endDate).toLocaleDateString()}
+          {subscription.expiresAt && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                End Date
               </span>
-              {subscription.status === "active" && (
-                <span
-                  className={`text-xs ${getDaysRemainingColor(daysRemaining)}`}
-                >
-                  {daysRemaining < 0
-                    ? "Expired"
-                    : daysRemaining === 0
-                    ? "Expires today"
-                    : `${daysRemaining} days remaining`}
+              <div className="flex flex-col items-end">
+                <span className="font-medium">
+                  {(() => {
+                    const endDate = subscription.expiresAt;
+                    const date = new Date(endDate);
+                    return isNaN(date.getTime())
+                      ? "Invalid date"
+                      : date.toLocaleDateString();
+                  })()}
                 </span>
-              )}
+                {subscription.status === "active" && daysRemaining !== null && (
+                  <span
+                    className={`text-xs ${getDaysRemainingColor(
+                      daysRemaining
+                    )}`}
+                  >
+                    {daysRemaining < 0
+                      ? "Expired"
+                      : daysRemaining === 0
+                      ? "Expires today"
+                      : `${daysRemaining} days remaining`}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Next Billing Date */}
           {subscription.status === "active" && nextBillingDate && (
@@ -355,6 +397,7 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
 
         {/* Renewal Alert */}
         {subscription.status === "active" &&
+          daysRemaining !== null &&
           daysRemaining >= 0 &&
           daysRemaining <= 7 && (
             <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg flex items-start gap-2">
@@ -370,10 +413,29 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
               </div>
             </div>
           )}
+
+        {/* Expiration/Suspension Alert */}
+        {(subscription.status === "expired" ||
+          subscription.status === "suspended") && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm text-red-400 font-medium">
+                Subscription Suspended
+              </p>
+              <p className="text-xs text-red-300/80">
+                This client's subscription has expired or is suspended. Services
+                may be restricted.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}
-      {subscription.status === "active" && (
+      {(subscription.status === "active" ||
+        subscription.status === "expired" ||
+        subscription.status === "suspended") && (
         <div className="pt-4 space-y-2">
           <div className="flex gap-2">
             <button
@@ -408,36 +470,6 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
           >
             <DollarSign className="w-4 h-4" />
             Edit Details
-          </button>
-
-          {/* Change Plan Button - For changing to a different plan */}
-          {onChangePlan && (
-            <button
-              type="button"
-              onClick={onChangePlan}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 
-                         bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 
-                         border border-blue-500/30 rounded-lg transition-colors font-medium"
-            >
-              <CreditCard className="w-4 h-4" />
-              Change Plan
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Change Plan Button - For clients without active subscription */}
-      {(!subscription || subscription.status !== "active") && onChangePlan && (
-        <div className="pt-4">
-          <button
-            type="button"
-            onClick={onChangePlan}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 
-                       bg-primary hover:bg-primary/90 text-primary-foreground 
-                       border border-primary/30 rounded-lg transition-colors font-medium"
-          >
-            <CreditCard className="w-4 h-4" />
-            Assign Plan
           </button>
         </div>
       )}
@@ -567,7 +599,7 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
         </div>
       )}
 
-      {/* Update Subscription Dialog */}
+      {/* Update Subscription Dialog - For editing subscription details */}
       {subscription && (
         <UpdateSubscriptionDialog
           open={showUpdateDialog}
@@ -575,6 +607,55 @@ export const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
           clientId={clientId}
           subscription={subscription}
           onSuccess={onUpdate}
+        />
+      )}
+
+      {/* Assign Subscription Dialog - For assigning plan to clients without subscription */}
+      {stableClient && (
+        <AssignSubscriptionDialog
+          open={showAssignDialog}
+          onOpenChange={(open) => {
+            setShowAssignDialog(open);
+            if (!open && onUpdate) {
+              setTimeout(() => {
+                onUpdate();
+              }, 0);
+            }
+          }}
+          client={stableClient}
+          onSuccess={() => {
+            setShowAssignDialog(false);
+            if (onUpdate) {
+              setTimeout(() => {
+                onUpdate();
+              }, 100);
+            }
+          }}
+        />
+      )}
+
+      {/* Change Plan Dialog - For changing existing subscription plan */}
+      {subscription && (
+        <ChangePlanDialog
+          open={showChangePlanDialog}
+          onOpenChange={(open) => {
+            setShowChangePlanDialog(open);
+            if (!open && onUpdate) {
+              setTimeout(() => {
+                onUpdate();
+              }, 0);
+            }
+          }}
+          clientId={clientId}
+          currentSubscription={subscription}
+          onSuccess={() => {
+            setShowChangePlanDialog(false);
+            if (onUpdate) {
+              setTimeout(() => {
+                onUpdate();
+              }, 100);
+            }
+          }}
         />
       )}
     </>

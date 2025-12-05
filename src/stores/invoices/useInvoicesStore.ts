@@ -1,15 +1,15 @@
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { Invoice } from '../types';
-import { STORE_VERSIONS } from '../types';
-import { apiClient } from '@/services/api/apiClient';
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { Invoice } from "@/types/invoice.types";
+import { STORE_VERSIONS } from "../types";
+import { apiClient } from "@/services/api/apiClient";
 
 interface InvoicesState {
   invoices: Invoice[];
   loading: boolean;
   error: string | null;
   searchTerm: string;
-  statusFilter: 'all' | 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+  statusFilter: "all" | "draft" | "sent" | "paid" | "overdue" | "cancelled";
   dateFilter: {
     startDate?: Date;
     endDate?: Date;
@@ -27,23 +27,30 @@ interface InvoicesActions {
   setError: (error: string | null) => void;
   clearError: () => void;
   setSearchTerm: (term: string) => void;
-  setStatusFilter: (filter: 'all' | 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled') => void;
+  setStatusFilter: (
+    filter: "all" | "draft" | "sent" | "paid" | "overdue" | "cancelled"
+  ) => void;
   setDateFilter: (filter: { startDate?: Date; endDate?: Date }) => void;
   setSelectedInvoice: (invoice: Invoice | null) => void;
-  
+
   // API actions
   fetchInvoices: () => Promise<void>;
   fetchInvoice: (id: string) => Promise<Invoice>;
-  createInvoice: (invoiceData: Omit<Invoice, '_id' | 'invoiceNumber' | 'createdAt' | 'updatedAt'>) => Promise<Invoice>;
+  createInvoice: (
+    invoiceData: Omit<
+      Invoice,
+      "_id" | "invoiceNumber" | "createdAt" | "updatedAt"
+    >
+  ) => Promise<Invoice>;
   updateInvoiceApi: (id: string, updates: Partial<Invoice>) => Promise<Invoice>;
   deleteInvoice: (id: string) => Promise<void>;
-  
+
   // Invoice operations
   sendInvoice: (id: string) => Promise<void>;
   markAsPaid: (id: string) => Promise<void>;
   markAsOverdue: (id: string) => Promise<void>;
   cancelInvoice: (id: string) => Promise<void>;
-  
+
   // Utility actions
   getOverdueInvoices: () => Invoice[];
   getUnpaidInvoices: () => Invoice[];
@@ -51,7 +58,7 @@ interface InvoicesActions {
   getInvoicesByDateRange: (startDate: Date, endDate: Date) => Invoice[];
   calculateTotalRevenue: () => number;
   calculateOutstandingAmount: () => number;
-  
+
   // Computed getters
   getInvoiceById: (id: string) => Invoice | undefined;
   getFilteredInvoices: () => Invoice[];
@@ -66,17 +73,17 @@ export const useInvoicesStore = create<InvoicesStore>()(
       invoices: [],
       loading: false,
       error: null,
-      searchTerm: '',
-      statusFilter: 'all',
+      searchTerm: "",
+      statusFilter: "all",
       dateFilter: {},
       selectedInvoice: null,
 
       // State management actions
       setInvoices: (invoices) => set({ invoices }),
-      
-      addInvoice: (invoice) => 
-        set((state) => ({ 
-          invoices: [...state.invoices, invoice] 
+
+      addInvoice: (invoice) =>
+        set((state) => ({
+          invoices: [...state.invoices, invoice],
         })),
 
       updateInvoice: (id, updates) =>
@@ -103,20 +110,43 @@ export const useInvoicesStore = create<InvoicesStore>()(
       fetchInvoices: async () => {
         set({ loading: true, error: null });
         try {
-          const response = await apiClient.get('/invoices');
-          const data = response.data;
-          set({ invoices: data, loading: false });
+          const response = await apiClient.get("/invoices");
+          // Handle nested API response structure
+          const invoicesData =
+            response.data?.data?.invoices ||
+            response.data?.invoices ||
+            response.data ||
+            [];
+          // Ensure we always set an array
+          const invoicesArray = Array.isArray(invoicesData) ? invoicesData : [];
+          set({ invoices: invoicesArray, loading: false });
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Failed to fetch invoices', loading: false });
+          set({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch invoices",
+            loading: false,
+          });
         }
       },
 
       fetchInvoice: async (id: string) => {
         try {
           const response = await apiClient.get(`/invoices/${id}`);
-          return response.data;
+          // Handle nested API response structure
+          return (
+            response.data?.data?.invoice ||
+            response.data?.invoice ||
+            response.data
+          );
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Failed to fetch invoice' });
+          set({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch invoice",
+          });
           throw error;
         }
       },
@@ -124,12 +154,25 @@ export const useInvoicesStore = create<InvoicesStore>()(
       createInvoice: async (invoiceData) => {
         set({ loading: true, error: null });
         try {
-          const response = await apiClient.post('/invoices', invoiceData);
-          const newInvoice = response.data;
-          set((state) => ({ invoices: [...state.invoices, newInvoice], loading: false }));
+          const response = await apiClient.post("/invoices", invoiceData);
+          // Handle nested API response structure
+          const newInvoice =
+            response.data?.data?.invoice ||
+            response.data?.invoice ||
+            response.data;
+          set((state) => ({
+            invoices: [...state.invoices, newInvoice],
+            loading: false,
+          }));
           return newInvoice;
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Failed to create invoice', loading: false });
+          set({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to create invoice",
+            loading: false,
+          });
           throw error;
         }
       },
@@ -138,12 +181,22 @@ export const useInvoicesStore = create<InvoicesStore>()(
         set({ loading: true, error: null });
         try {
           const response = await apiClient.put(`/invoices/${id}`, updates);
-          const updatedInvoice = response.data;
+          // Handle nested API response structure
+          const updatedInvoice =
+            response.data?.data?.invoice ||
+            response.data?.invoice ||
+            response.data;
           get().updateInvoice(id, updatedInvoice);
           set({ loading: false });
           return updatedInvoice;
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Failed to update invoice', loading: false });
+          set({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to update invoice",
+            loading: false,
+          });
           throw error;
         }
       },
@@ -155,92 +208,113 @@ export const useInvoicesStore = create<InvoicesStore>()(
           get().removeInvoice(id);
           set({ loading: false });
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Failed to delete invoice', loading: false });
+          set({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to delete invoice",
+            loading: false,
+          });
           throw error;
         }
       },
 
       // Invoice operations
       sendInvoice: async (id) => {
-        await get().updateInvoiceApi(id, { status: 'sent' });
+        await get().updateInvoiceApi(id, { status: "sent" });
       },
 
       markAsPaid: async (id) => {
-        await get().updateInvoiceApi(id, { status: 'paid' });
+        await get().updateInvoiceApi(id, { status: "paid" });
       },
 
       markAsOverdue: async (id) => {
-        await get().updateInvoiceApi(id, { status: 'overdue' });
+        await get().updateInvoiceApi(id, { status: "overdue" });
       },
 
       cancelInvoice: async (id) => {
-        await get().updateInvoiceApi(id, { status: 'cancelled' });
+        await get().updateInvoiceApi(id, { status: "cancelled" });
       },
 
       // Utility actions
       getOverdueInvoices: () => {
         const now = new Date();
-        return get().invoices.filter(invoice => 
-          invoice.status === 'sent' && 
-          new Date(invoice.dueDate) < now
+        return get().invoices.filter(
+          (invoice) =>
+            invoice.status === "sent" && new Date(invoice.dueDate) < now
         );
       },
 
       getUnpaidInvoices: () => {
-        return get().invoices.filter(invoice => 
-          ['draft', 'sent', 'overdue'].includes(invoice.status)
+        return get().invoices.filter((invoice) =>
+          ["draft", "sent", "overdue"].includes(invoice.status)
         );
       },
 
       getInvoicesByClient: (clientId: string) => {
-        return get().invoices.filter(invoice => 
-          typeof invoice.client === 'string' ? invoice.client === clientId : invoice.client._id === clientId
+        return get().invoices.filter((invoice) =>
+          typeof invoice.client === "string"
+            ? invoice.client === clientId
+            : invoice.client._id === clientId
         );
       },
 
       getInvoicesByDateRange: (startDate: Date, endDate: Date) => {
-        return get().invoices.filter(invoice => {
+        return get().invoices.filter((invoice) => {
           const issueDate = new Date(invoice.issueDate);
           return issueDate >= startDate && issueDate <= endDate;
         });
       },
 
       calculateTotalRevenue: () => {
-        return get().invoices
-          .filter(invoice => invoice.status === 'paid')
+        return get()
+          .invoices.filter((invoice) => invoice.status === "paid")
           .reduce((total, invoice) => total + invoice.total, 0);
       },
 
       calculateOutstandingAmount: () => {
-        return get().invoices
-          .filter(invoice => ['sent', 'overdue'].includes(invoice.status))
+        return get()
+          .invoices.filter((invoice) =>
+            ["sent", "overdue"].includes(invoice.status)
+          )
           .reduce((total, invoice) => total + invoice.total, 0);
       },
 
       // Computed getters
       getInvoiceById: (id: string) => {
-        return get().invoices.find(invoice => invoice._id === id);
+        return get().invoices.find((invoice) => invoice._id === id);
       },
 
       getFilteredInvoices: () => {
         const { invoices, searchTerm, statusFilter, dateFilter } = get();
-        return invoices.filter(invoice => {
-          const matchesSearch = searchTerm === '' || 
-            invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (typeof invoice.client === 'string' ? invoice.client : invoice.client.companyName)
-              .toLowerCase().includes(searchTerm.toLowerCase());
-          
-          const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
-          
-          const matchesDate = (!dateFilter.startDate || new Date(invoice.issueDate) >= dateFilter.startDate) &&
-                            (!dateFilter.endDate || new Date(invoice.issueDate) <= dateFilter.endDate);
-          
+        return invoices.filter((invoice) => {
+          const matchesSearch =
+            searchTerm === "" ||
+            invoice.invoiceNumber
+              .toLowerCase()
+              .includes(searchTerm.toLowerCase()) ||
+            (typeof invoice.client === "string"
+              ? invoice.client
+              : invoice.client.companyName
+            )
+              .toLowerCase()
+              .includes(searchTerm.toLowerCase());
+
+          const matchesStatus =
+            statusFilter === "all" || invoice.status === statusFilter;
+
+          const matchesDate =
+            (!dateFilter.startDate ||
+              new Date(invoice.issueDate) >= dateFilter.startDate) &&
+            (!dateFilter.endDate ||
+              new Date(invoice.issueDate) <= dateFilter.endDate);
+
           return matchesSearch && matchesStatus && matchesDate;
         });
       },
     }),
     {
-      name: 'invoices-store',
+      name: "invoices-store",
       version: STORE_VERSIONS.INVOICES,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({

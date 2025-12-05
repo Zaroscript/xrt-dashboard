@@ -2,7 +2,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { motion } from 'framer-motion';
-import { User, UserStatus } from '@/store/slices/usersSlice';
+import type { User } from '@/stores/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -15,8 +15,7 @@ import {
   FormDescription,
 } from '@/components/ui/form';
 import { Switch } from '@/components/ui/switch';
-import { useAppDispatch } from '@/store/store';
-import { updateUser } from '@/store/slices/usersSlice';
+import { useUsersStore } from '@/stores/index';
 import { useToast } from '@/components/ui/use-toast';
 import { X, Plus, Trash2, Globe } from 'lucide-react';
 import { AvatarUpload } from '@/components/ui/AvatarUpload';
@@ -27,12 +26,9 @@ const formSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters').max(50),
   lastName: z.string().min(2, 'Last name must be at least 2 characters').max(50),
   email: z.string().email('Invalid email address'),
-  phoneNumber: z.string().regex(/^\+?[0-9\s-]+$/, 'Please enter a valid phone number'),
-  hasOldWebsite: z.boolean().default(false),
-  websites: z.array(z.object({
-    url: z.string().url('Please enter a valid URL').or(z.literal('')),
-  })).default([{ url: '' }]),
-  businessLocation: z.string().min(2, 'Please enter a valid location').max(100),
+  phone: z.string().optional(),
+  companyName: z.string().optional(),
+  oldWebsite: z.string().url('Invalid URL').optional().or(z.literal('')),
 });
 
 interface EditProfileProps {
@@ -42,31 +38,22 @@ interface EditProfileProps {
 }
 
 export const EditProfile = ({ user, onSuccess, onCancel }: EditProfileProps) => {
-  const dispatch = useAppDispatch();
+  const { updateUser } = useUsersStore();
   const { toast } = useToast();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatar || null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      firstName: user.firstName || user.name?.split(' ')[0] || '',
-      lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || '',
+      firstName: user.fName || '',
+      lastName: user.lName || '',
       email: user.email,
-      phoneNumber: user.phoneNumber || '',
-      hasOldWebsite: user.websites && user.websites.length > 0,
-      websites: user.websites && user.websites.length > 0 
-        ? user.websites.map(url => ({ url })) 
-        : [{ url: '' }],
-      businessLocation: user.businessLocation || '',
+      phone: user.phone || '',
+      companyName: user.companyName || '',
+      oldWebsite: user.oldWebsite || '',
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: 'websites',
-  });
-
-  const hasOldWebsite = form.watch('hasOldWebsite');
   const firstName = form.watch('firstName');
 
   const handleAvatarUpload = async (file: File) => {
@@ -75,14 +62,14 @@ export const EditProfile = ({ user, onSuccess, onCancel }: EditProfileProps) => 
       setAvatarUrl(newAvatarUrl);
       
       // Update user in store immediately to reflect change
-      dispatch(updateUser({
-        ...user,
-        avatar: newAvatarUrl
-      }));
-
+      await updateUser({
+        _id: user._id,
+        avatar: newAvatarUrl,
+      });
+      
       toast({
-        title: 'Avatar updated',
-        description: 'Your profile picture has been updated successfully.',
+        title: 'Avatar uploaded',
+        description: 'Your avatar has been updated successfully.',
       });
     } catch (error) {
       console.error('Avatar upload failed:', error);
@@ -101,10 +88,10 @@ export const EditProfile = ({ user, onSuccess, onCancel }: EditProfileProps) => 
       setAvatarUrl(null);
       
       // Update user in store
-      dispatch(updateUser({
-        ...user,
+      await updateUser({
+        _id: user._id,
         avatar: undefined
-      }));
+      });
 
       toast({
         title: 'Avatar removed',
@@ -121,32 +108,35 @@ export const EditProfile = ({ user, onSuccess, onCancel }: EditProfileProps) => 
     }
   };
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
-    // Filter out empty website URLs
-    const websites = values.websites
-      .map(website => website.url.trim())
-      .filter(url => url !== '');
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      const updatedUser = {
+        _id: user._id,
+        fName: values.firstName,
+        lName: values.lastName,
+        email: values.email,
+        phone: values.phone,
+        companyName: values.companyName,
+        oldWebsite: values.oldWebsite || undefined,
+        avatar: avatarUrl || undefined,
+      };
 
-    const updatedUser: User = {
-      ...user,
-      name: `${values.firstName} ${values.lastName}`,
-      email: values.email,
-      firstName: values.firstName,
-      lastName: values.lastName,
-      phoneNumber: values.phoneNumber,
-      businessLocation: values.businessLocation,
-      websites: websites.length > 0 ? websites : undefined,
-      avatar: avatarUrl || undefined,
-    };
+      await updateUser(updatedUser);
+      
+      toast({
+        title: 'Profile updated',
+        description: `${values.firstName}'s profile has been updated successfully.`,
+      });
 
-    dispatch(updateUser(updatedUser));
-    
-    toast({
-      title: 'Profile updated',
-      description: `${values.firstName}'s profile has been updated successfully.`,
-    });
-
-    if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess();
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update profile. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -180,7 +170,7 @@ export const EditProfile = ({ user, onSuccess, onCancel }: EditProfileProps) => 
           <div className="flex justify-center mb-6">
             <AvatarUpload
               currentAvatar={avatarUrl}
-              initials={firstName || user.firstName || '?'}
+              initials={firstName || user.fName || '?'}
               onUpload={handleAvatarUpload}
               onDelete={handleAvatarDelete}
             />
@@ -236,110 +226,47 @@ export const EditProfile = ({ user, onSuccess, onCancel }: EditProfileProps) => 
                 )}
               />
 
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="hasOldWebsite"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">Has Existing Website?</FormLabel>
-                        <FormDescription>
-                          Does this user have an existing website that needs to be migrated?
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                {hasOldWebsite && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <FormLabel>Website URLs</FormLabel>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => append({ url: '' })}
-                        className="gap-2"
-                      >
-                        <Plus className="h-4 w-4" /> Add URL
-                      </Button>
-                    </div>
-                    
-                    {fields.map((field, index) => (
-                      <div key={field.id} className="flex items-center space-x-2">
-                        <FormField
-                          control={form.control}
-                          name={`websites.${index}.url`}
-                          render={({ field }) => (
-                            <FormItem className="flex-1">
-                              <FormControl>
-                                <div className="relative">
-                                  <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                  <Input
-                                    placeholder="https://example.com"
-                                    className="pl-10"
-                                    {...field}
-                                  />
-                                </div>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        {index > 0 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => remove(index)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+1 (555) 123-4567" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </div>
+              />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="businessLocation"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Business Location *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="City, Country" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <FormField
+                control={form.control}
+                name="companyName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Company Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Acme Inc." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                <FormField
-                  control={form.control}
-                  name="phoneNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone Number *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="+1 (555) 123-4567" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+              <FormField
+                control={form.control}
+                name="oldWebsite"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Existing Website</FormLabel>
+                    <FormControl>
+                      <Input placeholder="https://example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div className="flex justify-end space-x-3 pt-4">
                 <Button type="button" variant="outline" onClick={onCancel}>

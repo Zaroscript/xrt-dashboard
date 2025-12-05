@@ -36,9 +36,8 @@ import { cn } from "@/lib/utils";
 const editSubscriberSchema = z.object({
   status: z.enum([
     "active",
-    "inactive",
-    "suspended",
-    "cancelled",
+    "suspended", 
+    "canceled",
     "pending_approval",
     "expired",
     "rejected",
@@ -129,6 +128,9 @@ export function EditSubscriberDialog({
       onOpenChange(false);
     } catch (error) {
       console.error("Failed to update subscriber:", error);
+      // Add user feedback for the error
+      const errorMessage = error instanceof Error ? error.message : "Failed to update subscriber";
+      console.error("Update error details:", errorMessage);
     } finally {
       setLoading(false);
     }
@@ -163,9 +165,8 @@ export function EditSubscriberDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
                   <SelectItem value="suspended">Suspended</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="canceled">Canceled</SelectItem>
                   <SelectItem value="pending_approval">
                     Pending Approval
                   </SelectItem>

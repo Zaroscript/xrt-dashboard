@@ -29,9 +29,9 @@ const ProtectedRoute = ({
   // Check if user has required permissions
   const hasRequiredPermissions = useMemo(() => {
     if (requiredPermissions.length === 0) return true;
-    if (!user?.permissions) return false;
+    if (!user || !user.permissions) return false;
     return requiredPermissions.some(permission => user.permissions.includes(permission));
-  }, [user?.permissions, requiredPermissions]);
+  }, [user, requiredPermissions]);
 
   // Determine if we should show loading or redirect
   const shouldShowLoader = !_hasHydrated || isLoading || isCheckingAuth;
@@ -73,20 +73,8 @@ const ProtectedRoute = ({
 
   // Debug logging
   useEffect(() => {
-    console.log('ProtectedRoute - Auth state:', {
-      isAuthenticated,
-      isLoading,
-      isCheckingAuth,
-      user: user ? { 
-        id: user._id, 
-        role: user.role,
-        hasRequiredRole,
-        hasRequiredPermissions
-      } : null,
-      currentPath: location.pathname,
-      _hasHydrated
-    });
-  }, [isAuthenticated, isLoading, isCheckingAuth, user, location.pathname, hasRequiredRole, hasRequiredPermissions, _hasHydrated]);
+    // Debug auth state
+  }, [isAuthenticated, isLoading, isCheckingAuth, user, hasRequiredRole, hasRequiredPermissions, location.pathname, _hasHydrated]);
 
   return getContent();
 };

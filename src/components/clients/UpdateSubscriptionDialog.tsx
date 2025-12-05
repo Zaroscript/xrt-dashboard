@@ -35,7 +35,7 @@ interface UpdateSubscriptionDialogProps {
     customPrice?: number;
     discount?: number;
     billingCycle: string;
-    endDate: string;
+    expiresAt: string;
   };
   onSuccess?: () => void;
 }
@@ -54,8 +54,8 @@ export function UpdateSubscriptionDialog({
     customPrice: subscription.customPrice || subscription.plan.price,
     discount: subscription.discount || 0,
     billingCycle: subscription.billingCycle,
-    endDate: subscription.endDate
-      ? new Date(subscription.endDate).toISOString().split("T")[0]
+    endDate: subscription.expiresAt
+      ? new Date(subscription.expiresAt).toISOString().split("T")[0]
       : "",
   });
 
@@ -74,6 +74,7 @@ export function UpdateSubscriptionDialog({
         planId: subscription.plan._id, // Required field
         billingCycle: formData.billingCycle,
         startDate: new Date().toISOString().split("T")[0], // Use current date for updates
+        endDate: formData.endDate,
         customPrice:
           formData.customPrice !== subscription.plan.price
             ? formData.customPrice

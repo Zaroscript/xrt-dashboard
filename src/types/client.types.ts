@@ -17,6 +17,7 @@ export interface UserRef {
   avatar?: string;
   plainPassword?: string;
   status?: string;
+  isApproved?: boolean;
 }
 
 export interface ServiceRef {

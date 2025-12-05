@@ -1,6 +1,6 @@
 export interface InvoiceItem {
   description: string;
-  quantity: number;
+  durationType: 'one-time' | 'monthly' | 'quarterly' | 'annual';
   unitPrice: number;
   taxRate?: number;
   amount?: number;
@@ -9,7 +9,7 @@ export interface InvoiceItem {
 export interface InvoiceClient {
   _id: string;
   companyName: string;
-  email: string;
+  email?: string;
   phone?: string;
   address?: {
     street?: string;
@@ -18,6 +18,7 @@ export interface InvoiceClient {
     country?: string;
     postalCode?: string;
   };
+  user?: InvoiceUser | string;
 }
 
 export interface InvoiceUser {

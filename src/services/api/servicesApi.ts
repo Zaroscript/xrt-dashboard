@@ -5,7 +5,6 @@ export const servicesApi = {
   // Get all services
   getServices: async (): Promise<Service[]> => {
     try {
-      console.log('Fetching services...');
       const response = await apiClient.get('/services');
       return response.data.data?.services || response.data.data || response.data;
     } catch (error) {
@@ -17,7 +16,6 @@ export const servicesApi = {
   // Get a single service by ID
   getService: async (id: string): Promise<Service> => {
     try {
-      console.log(`Fetching service ${id}...`);
       const response = await apiClient.get(`/services/${id}`);
       return response.data.data?.service || response.data.data || response.data;
     } catch (error) {
@@ -29,7 +27,6 @@ export const servicesApi = {
   // Create a new service
   createService: async (serviceData: Omit<Service, '_id' | 'createdAt' | 'updatedAt'>): Promise<Service> => {
     try {
-      console.log('Creating new service...');
       const response = await apiClient.post('/admin/services', serviceData);
       return response.data.data?.service || response.data.data || response.data;
     } catch (error) {
@@ -41,7 +38,6 @@ export const servicesApi = {
   // Update an existing service
   updateService: async (id: string, updates: Partial<Service>): Promise<Service> => {
     try {
-      console.log(`Updating service ${id}...`);
       const response = await apiClient.patch(`/admin/services/${id}`, updates);
       return response.data.data?.service || response.data.data || response.data;
     } catch (error) {
@@ -53,7 +49,6 @@ export const servicesApi = {
   // Delete a service
   deleteService: async (id: string): Promise<void> => {
     try {
-      console.log(`Deleting service ${id}...`);
       await apiClient.delete(`/admin/services/${id}`);
     } catch (error) {
       console.error(`Error deleting service ${id}:`, error);
@@ -64,7 +59,6 @@ export const servicesApi = {
   // Toggle service status
   toggleServiceStatus: async (id: string): Promise<Service> => {
     try {
-      console.log(`Toggling status for service ${id}...`);
       const response = await apiClient.patch(`/admin/services/${id}/toggle-status`);
       return response.data.data?.service || response.data.data || response.data;
     } catch (error) {

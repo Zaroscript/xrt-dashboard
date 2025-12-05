@@ -19,6 +19,7 @@ import { AssignServiceDialog } from "@/components/clients/AssignServiceDialog";
 import { ClientServicesCard } from "@/components/clients/ClientServicesCard";
 import { ClientProfileSkeleton } from "@/components/clients/profile/ClientProfileSkeleton";
 import { ResetPasswordDialog } from "@/components/clients/ResetPasswordDialog";
+import { ClientInvoicesCard } from "@/components/clients/profile/ClientInvoicesCard";
 
 // Define form schema
 const clientFormSchema = z.object({
@@ -66,9 +67,6 @@ export default function ClientProfile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // Debug
-  console.log("ClientProfile component rendered with ID:", id);
-
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
@@ -101,11 +99,7 @@ export default function ClientProfile() {
         variant: "destructive",
       });
       navigate("/dashboard/clients");
-      return;
     }
-
-    // Log the actual ID for debugging
-    console.log("Client ID from URL:", id);
   }, [id, navigate, toast]);
 
   // Form setup
@@ -145,8 +139,6 @@ export default function ClientProfile() {
   const [isEditing, setIsEditing] = useState(false);
   const [client, setClient] = useState<Client | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isChangingPlan, setIsChangingPlan] = useState(false);
-  console.log("ClientProfile: isChangingPlan =", isChangingPlan);
   const [isAssignServiceOpen, setIsAssignServiceOpen] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -296,10 +288,8 @@ export default function ClientProfile() {
   const onSubmit = async (data: ClientFormValues) => {
     if (isNewClient) {
       // Handle new client creation
-      console.log("Creating new client:", data);
     } else {
       // Handle client update
-      console.log("Updating client:", data);
       const transformedData = transformFormDataToClient(data);
 
       setIsUpdating(true);
@@ -488,11 +478,13 @@ export default function ClientProfile() {
         <SubscriptionCard
           clientId={id as string}
           subscription={client.subscription}
+          client={client}
           onUpdate={async () => {
-            const updatedClient = await fetchClient(id as string);
-            setClient(updatedClient);
+            if (id) {
+              const updatedClient = await fetchClient(id as string);
+              setClient(updatedClient);
+            }
           }}
-          onChangePlan={() => setIsChangingPlan(true)}
         />
       )}
 
@@ -512,54 +504,52 @@ export default function ClientProfile() {
       {client && (
         <div className="space-y-6">
           <ClientMetrics client={client} />
+          <ClientInvoicesCard clientId={id as string} />
           <RecentActivity clientId={id as string} />
         </div>
       )}
 
       {client && (
         <>
-          {isChangingPlan && (
-            <AssignSubscriptionDialog
-              open={isChangingPlan}
-              onOpenChange={setIsChangingPlan}
-              client={client}
-              onSuccess={async () => {
-                const updatedClient = await fetchClient(id as string);
-                setClient(updatedClient);
-                toast({
-                  title: "Success",
-                  description: "Plan updated successfully",
-                });
-              }}
-            />
-          )}
+          {/* AssignSubscriptionDialog is now handled by SubscriptionCard component */}
+          {/* Removed duplicate dialog - SubscriptionCard handles it internally */}
 
           <AssignServiceDialog
             open={isAssignServiceOpen}
             onOpenChange={setIsAssignServiceOpen}
             client={client}
             onSuccess={async () => {
-              const updatedClient = await fetchClient(id as string);
-              setClient(updatedClient);
-              toast({
-                title: "Success",
-                description: "Service assigned successfully",
-              });
-            }}
-          />
-
-          <ResetPasswordDialog
-            open={isResetPasswordOpen}
-            onOpenChange={setIsResetPasswordOpen}
-            clientId={id as string}
-            clientName={client?.companyName || "Client"}
-            onSuccess={async () => {
-              const updatedClient = await fetchClient(id as string);
-              setClient(updatedClient);
+              if (id) {
+                const updatedClient = await fetchClient(id as string);
+                setClient(updatedClient);
+                toast({
+                  title: "Success",
+                  description: "Service assigned successfully",
+                });
+              }
             }}
           />
         </>
       )}
+
+      <ResetPasswordDialog
+        open={isResetPasswordOpen}
+        onOpenChange={setIsResetPasswordOpen}
+        clientId={id as string}
+        clientName={
+          (client?.user && typeof client.user === "object" && client.user?.fName && client.user?.lName
+            ? `${client.user.fName} ${client.user.lName}`
+            : null) ||
+          client?.companyName ||
+          "Client"
+        }
+        onSuccess={async () => {
+          if (id) {
+            const updatedClient = await fetchClient(id as string);
+            setClient(updatedClient);
+          }
+        }}
+      />
     </div>
   );
 }

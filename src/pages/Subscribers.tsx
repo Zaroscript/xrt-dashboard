@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSubscribersStore } from "@/stores/subscribers/useSubscribersStore";
+import { useClientsStore } from "@/stores/clients/useClientsStore";
 import SubscriberCard from "@/components/subscribers/SubscriberCard";
 import { AddSubscriberDialog } from "@/components/subscribers/AddSubscriberDialog";
 import { useExportClients } from "@/hooks/useExportClients";
@@ -29,17 +30,31 @@ const Subscribers = () => {
     setSearchTerm,
     loading,
     error,
-    updateSubscriber: updateSubscriberApi,
+    updateSubscriberApi,
     removeSubscriber,
+    deleteSubscriber,
     fetchSubscribers,
   } = useSubscribersStore();
   const canModify = useCanModify();
   const { toast } = useToast();
+  const { fetchClients } = useClientsStore();
 
   // Load subscribers on component mount
   useEffect(() => {
-    fetchSubscribers();
-  }, []);
+    const loadData = async () => {
+      try {
+        await Promise.all([fetchSubscribers(), fetchClients()]);
+      } catch (error) {
+        console.error("Failed to load data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load data. Please refresh the page.",
+          variant: "destructive",
+        });
+      }
+    };
+    loadData();
+  }, [fetchSubscribers, fetchClients, toast]);
 
   // Filter subscribers based on search term
   const filteredSubscribers = useMemo(() => {
@@ -65,10 +80,24 @@ const Subscribers = () => {
   // Calculate metrics based on subscribers only
   const totalRevenue = useMemo(() => {
     return filteredSubscribers.reduce((sum, subscriber) => {
+      // Logic for total monthly revenue (MRR)
       const plan =
         typeof subscriber.plan?.plan === "object" ? subscriber.plan.plan : null;
-      const amount = plan?.price || 0;
-      return sum + amount;
+
+      if (!plan || subscriber.status !== "active") return sum;
+
+      const billingCycle =
+        subscriber.plan.billingCycle || plan.billingCycle || "monthly";
+      let price = subscriber.plan.customPrice || plan.price || 0;
+
+      // Normalize to monthly
+      if (billingCycle === "annually" || billingCycle === "yearly") {
+        price = price / 12;
+      } else if (billingCycle === "quarterly") {
+        price = price / 3;
+      }
+
+      return sum + price;
     }, 0);
   }, [filteredSubscribers]);
 
@@ -78,12 +107,25 @@ const Subscribers = () => {
       : 0;
   }, [filteredSubscribers, totalRevenue]);
 
-  const handleSubscriberUpdate = (subscriber: any) => {
+  const handleSubscriberUpdate = (subscriber: Subscriber) => {
     setEditingSubscriber(subscriber);
   };
 
   const handleSubscriberDelete = async (id: string) => {
-    await removeSubscriber(id);
+    try {
+      await deleteSubscriber(id);
+      toast({
+        title: "Subscriber Deleted",
+        description: "The subscriber has been removed successfully.",
+      });
+    } catch (error) {
+      console.error("Failed to delete subscriber:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete subscriber. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSubscriberStatusChange = async (
@@ -96,7 +138,20 @@ const Subscribers = () => {
       | "rejected"
       | "suspended"
   ) => {
-    await updateSubscriberApi(id, { status });
+    try {
+      await updateSubscriberApi(id, { status });
+      toast({
+        title: "Status Updated",
+        description: `Subscriber status has been updated to ${status}.`,
+      });
+    } catch (error) {
+      console.error("Failed to update subscriber status:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update subscriber status. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const [isAddClientOpen, setIsAddClientOpen] = useState(false);
@@ -289,7 +344,7 @@ const Subscribers = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">
-                      Total Revenue
+                      Monthly Revenue
                     </p>
                     <p className="text-2xl font-bold">
                       ${totalRevenue.toLocaleString()}

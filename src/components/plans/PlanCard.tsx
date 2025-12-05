@@ -58,19 +58,21 @@ export const PlanCard: React.FC<{
   };
 
   const { icon: PlanIcon, color: iconColor } = getPlanIcon();
-  const hasDiscount = plan.discount && (plan.discount.type === 'percentage' || plan.discount.type === 'fixed');
+  const hasDiscount =
+    plan.discount &&
+    (plan.discount.type === "percentage" || plan.discount.type === "fixed");
   const isActive = plan.isActive !== false; // Default to true if not specified
   const isFeatured = plan.isFeatured === true; // Ensure booleans
   const discountValue = hasDiscount
-    ? plan.discount?.type === 'percentage'
+    ? plan.discount?.type === "percentage"
       ? `${plan.discount.value}%`
       : `$${plan.discount.value}`
     : null;
 
   const calculateDiscountedPrice = () => {
     if (!hasDiscount) return plan.price;
-    
-    if (plan.discount?.type === 'percentage') {
+
+    if (plan.discount?.type === "percentage") {
       return plan.price * (1 - plan.discount.value / 100);
     } else {
       return Math.max(0, plan.price - (plan.discount?.value || 0));
@@ -129,18 +131,34 @@ export const PlanCard: React.FC<{
               <div className="flex items-center justify-between">
                 <CardTitle className="text-2xl font-bold">
                   {plan.name}
+                  {plan.badge?.text && (
+                    <Badge
+                      variant={plan.badge.variant || "default"}
+                      className="ml-2"
+                    >
+                      {plan.badge.text}
+                    </Badge>
+                  )}
                   {isFeatured && (
-                    <Badge variant="default" className="ml-2 bg-yellow-100 text-yellow-800">
+                    <Badge
+                      variant="default"
+                      className="ml-2 bg-yellow-100 text-yellow-800"
+                    >
                       <Star className="w-3 h-3 mr-1" />
                       Featured
                     </Badge>
                   )}
                 </CardTitle>
-                <Badge variant={isActive ? 'default' : 'outline'} className={cn(
-                  'text-xs',
-                  isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                )}>
-                  {isActive ? 'Active' : 'Inactive'}
+                <Badge
+                  variant={isActive ? "default" : "outline"}
+                  className={cn(
+                    "text-xs",
+                    isActive
+                      ? "bg-green-100 text-green-800"
+                      : "bg-gray-100 text-gray-800"
+                  )}
+                >
+                  {isActive ? "Active" : "Inactive"}
                 </Badge>
               </div>
             </div>
@@ -155,8 +173,8 @@ export const PlanCard: React.FC<{
                   <Edit className="mr-2 h-4 w-4" />
                   Edit Plan
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => onDelete(plan._id)} 
+                <DropdownMenuItem
+                  onClick={() => onDelete(plan._id)}
                   className="text-destructive focus:text-destructive"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
@@ -180,19 +198,23 @@ export const PlanCard: React.FC<{
                   </span>
                 )}
                 <span className="text-sm text-muted-foreground">
-                  /{plan.duration === 1 ? 'month' : `${plan.duration} months`}
+                  /{plan.duration === 1 ? "month" : `${plan.duration} months`}
                 </span>
               </div>
-              
+
               {hasDiscount && plan.discount && (
                 <div className="flex items-center mt-1">
-                  <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                  <Badge
+                    variant="outline"
+                    className="text-xs bg-green-50 text-green-700 border-green-200"
+                  >
                     <Percent className="w-3 h-3 mr-1" />
                     {discountValue} OFF
                   </Badge>
                   {plan.discount.endDate && (
                     <span className="ml-2 text-xs text-muted-foreground">
-                      until {format(new Date(plan.discount.endDate), 'MMM d, yyyy')}
+                      until{" "}
+                      {format(new Date(plan.discount.endDate), "MMM d, yyyy")}
                     </span>
                   )}
                 </div>
@@ -226,7 +248,7 @@ export const PlanCard: React.FC<{
               )}
             </div>
             <Badge variant="outline" className="text-xs">
-              {plan.duration} {plan.duration === 1 ? 'month' : 'months'}
+              {plan.duration} {plan.duration === 1 ? "month" : "months"}
             </Badge>
           </div>
         </CardFooter>

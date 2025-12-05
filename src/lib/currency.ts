@@ -1,5 +1,5 @@
 /**
- * Format currency amount
+ * Make money look nice and pretty
  */
 export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('en-US', {

@@ -28,12 +28,8 @@ export const plansService = {
 
   // Update a plan (admin only)
   updatePlan: async (id: string, planData: Partial<Plan>): Promise<Plan> => {
-    console.log('Updating plan:', id, planData);
     const response = await apiClient.patch(`/admin/plans/${id}`, planData);
-    console.log('Update plan response:', response);
-    console.log('Update plan response data:', response.data);
     const updatedPlan = response.data.data?.plan || response.data;
-    console.log('Extracted updated plan:', updatedPlan);
     return updatedPlan;
   },
 

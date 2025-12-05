@@ -9,14 +9,14 @@ import type {
 
 export type Client = ClientType;
 
-// Helper function to transform API client data to match the Client type
+// Make the API data look like what our app expects
 const transformClientData = (data: any): Client | null => {
   if (!data) {
     console.error("No data provided to transform");
     return null;
   }
 
-  // Helper function to safely get user property
+  // Get user data safely, no matter how it's structured
   const getUserProp = (prop: string) => {
     if (data.user && typeof data.user === "object") {
       return (data.user as any)[prop];
@@ -24,14 +24,14 @@ const transformClientData = (data: any): Client | null => {
     return (data as any)[prop];
   };
 
-  // Get user ID from various possible locations
+  // Find the user ID - it could be hiding in different places
   const userId =
     (data.user && typeof data.user === "object" ? data.user._id : null) ||
     (typeof data.user === "string" ? data.user : null) ||
     data.userId ||
     data._id;
 
-  // Create user reference with proper type safety
+  // Build a proper user object we can use
   const user: UserRef = {
     _id: userId || "",
     email: getUserProp("email") || "",
@@ -42,6 +42,8 @@ const transformClientData = (data: any): Client | null => {
     isActive:
       getUserProp("isActive") !== undefined ? getUserProp("isActive") : true,
     avatar: getUserProp("avatar"),
+    status: getUserProp("status"),
+    isApproved: getUserProp("isApproved"),
   };
 
   // Handle address - get address from data or user object
@@ -79,23 +81,40 @@ const transformClientData = (data: any): Client | null => {
     data.companyName ||
     "Unnamed Client";
 
+  // Preserve the populated user object if it exists, otherwise use the constructed user
+  const finalUser =
+    data.user && typeof data.user === "object" && data.user._id
+      ? (data.user as UserRef) // Keep the populated user object from backend
+      : user; // Use the constructed user as fallback
+
   // Merge user and client data, with client data taking precedence
   const client: Client = {
     // Spread client data first (overwrites any user data)
     ...data,
     // Then add user data for missing fields
     _id: data._id || userId || "",
-    user: userId, // Store just the user ID as reference
+    user: finalUser, // Keep the populated user object with all properties
+
+    // Ensure companyName is set
+    companyName: data.companyName || displayName,
 
     // Merge contact information (prefer client data, fall back to user data)
-    email: data.email || user.email || "",
-    phone: data.phone || user.phone || "",
+    email: data.email || finalUser.email || "",
+    phone: data.phone || finalUser.phone || "",
 
     // Add display name
     name: displayName,
 
-    // Handle address
-    address,
+    // Handle address - use businessLocation if available
+    address: data.businessLocation
+      ? {
+          street: data.businessLocation.address || "",
+          city: data.businessLocation.city || "",
+          state: data.businessLocation.state || "",
+          zipCode: data.businessLocation.zipCode || "",
+          country: data.businessLocation.country || "USA",
+        }
+      : address,
 
     // Handle services
     services: data.services || [],
@@ -109,25 +128,53 @@ const transformClientData = (data: any): Client | null => {
     // Add any additional client-specific fields
     taxId: data.taxId || "",
     isActive: data.isActive !== undefined ? data.isActive : true,
+
+    // Ensure businessLocation is preserved
+    businessLocation: data.businessLocation || undefined,
   };
 
   return client;
 };
 
 export const clientsService = {
-  // Get all clients
-  getClients: async (): Promise<Client[]> => {
+  // Get all clients with optional filtering
+  getClients: async (filters?: {
+    status?: string;
+    search?: string;
+    tier?: string;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+    page?: number;
+    limit?: number;
+    pending?: boolean;
+  }): Promise<{
+    clients: Client[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> => {
     try {
-      console.log("Fetching clients from API...");
-      // Use the correct endpoint from the backend
-      const response = await apiClient.get("/clients");
-      console.log("API Response status:", response.status, response.statusText);
-      console.log("Response data:", response.data);
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (filters?.status) params.append("status", filters.status);
+      if (filters?.search) params.append("search", filters.search);
+      if (filters?.tier) params.append("tier", filters.tier);
+      if (filters?.sortBy) params.append("sortBy", filters.sortBy);
+      if (filters?.sortOrder) params.append("sortOrder", filters.sortOrder);
+      if (filters?.page) params.append("page", filters.page.toString());
+      if (filters?.limit) params.append("limit", filters.limit.toString());
+      if (filters?.pending !== undefined)
+        params.append("pending", filters.pending.toString());
+
+      const queryString = params.toString();
+      const url = queryString ? `/clients?${queryString}` : "/clients";
+
+      const response = await apiClient.get(url);
 
       // Handle the server response format
       if (!response.data) {
         console.error("No data in response");
-        return [];
+        return { clients: [], total: 0, page: 1, totalPages: 0 };
       }
 
       // Handle the standard server response format: { status: 'success', data: { clients: [...] } }
@@ -140,10 +187,8 @@ export const clientsService = {
         clients = response.data;
       } else {
         console.error("Unexpected response format:", response.data);
-        return [];
+        return { clients: [], total: 0, page: 1, totalPages: 0 };
       }
-
-      console.log("Raw clients data:", clients);
 
       // Transform each client to match our Client type
       const transformedClients = clients
@@ -157,10 +202,34 @@ export const clientsService = {
         })
         .filter((client: Client | null): client is Client => client !== null);
 
-      console.log("Transformed clients:", transformedClients);
-      return transformedClients;
+      // Extract pagination info from response
+      const total =
+        response.data.total ||
+        response.data.data?.total ||
+        transformedClients.length;
+      const page = response.data.page || response.data.data?.page || 1;
+      const totalPages =
+        response.data.totalPages || response.data.data?.totalPages || 1;
+
+      return {
+        clients: transformedClients,
+        total,
+        page,
+        totalPages,
+      };
     } catch (error) {
       console.error("Error fetching clients:", error);
+      throw error;
+    }
+  },
+
+  // Get client stats
+  getStats: async () => {
+    try {
+      const response = await apiClient.get("/clients/stats");
+      return response.data.data;
+    } catch (error) {
+      console.error("Error fetching client stats:", error);
       throw error;
     }
   },
@@ -168,7 +237,6 @@ export const clientsService = {
   // Get a single client by ID
   getClient: async (id: string): Promise<Client> => {
     try {
-      console.log(`Fetching client with ID: ${id}`);
       const response = await apiClient.get(`/clients/${id}`);
 
       // Handle the standard server response format: { status: 'success', data: { client: {...} } }
@@ -251,7 +319,6 @@ export const clientsService = {
         {} as Record<string, any>
       );
 
-      console.log("Sending client data to API:", cleanPayload);
       const response = await apiClient.post("/clients", cleanPayload);
 
       if (!response.data) {
@@ -300,9 +367,7 @@ export const clientsService = {
         payload.oldWebsite = (payload as any).website;
       }
 
-      console.log("Updating client with payload:", payload);
       const response = await apiClient.patch(`/clients/${id}`, payload);
-      console.log("Update response:", response.data);
 
       // Handle the standard server response format: { status: 'success', data: { client: {...} } }
       const clientDataToTransform =
@@ -372,6 +437,29 @@ export const clientsService = {
     }
   },
 
+  // Reject client
+  rejectClient: async (id: string, reason?: string): Promise<Client> => {
+    try {
+      const response = await apiClient.patch(`/clients/${id}/reject`, {
+        reason,
+      });
+
+      // Handle the standard server response format: { status: 'success', data: { client: {...} } }
+      const clientDataToTransform =
+        response.data.data?.client || response.data.data;
+
+      if (!clientDataToTransform) {
+        console.error("No client data in response:", response.data);
+        throw new Error("No client data received from server");
+      }
+
+      return transformClientData(clientDataToTransform);
+    } catch (error) {
+      console.error(`Error rejecting client ${id}:`, error);
+      throw error;
+    }
+  },
+
   // Get client by user ID
   getClientByUser: async (userId: string): Promise<Client> => {
     try {
@@ -430,7 +518,6 @@ export const clientsService = {
   // Get client activities
   getClientActivities: async (clientId: string) => {
     try {
-      console.log(`Fetching activities for client ${clientId}...`);
       const response = await apiClient.get(`/clients/${clientId}/activities`);
 
       if (!response.data) {
@@ -441,7 +528,6 @@ export const clientsService = {
       // Handle the server response format
       const activities =
         response.data.data?.activities || response.data.activities || [];
-      console.log("Activities fetched:", activities);
 
       return activities;
     } catch (error) {
@@ -509,6 +595,7 @@ export const clientsService = {
       discount?: number;
       billingCycle: "monthly" | "quarterly" | "annually";
       startDate?: string;
+      endDate?: string;
       generateInvoice?: boolean;
       customFeatures?: string[];
     }
@@ -519,11 +606,13 @@ export const clientsService = {
         data
       );
       return response.data.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error(
-        `Error assigning subscription to client ${clientId}:`,
+        `[clientsService] Error assigning subscription to client ${clientId}:`,
         error
       );
+      console.error(`[clientsService] Error response:`, error.response?.data);
+      console.error(`[clientsService] Error status:`, error.response?.status);
       throw error;
     }
   },
