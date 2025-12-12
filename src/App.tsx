@@ -133,7 +133,7 @@ function App() {
             <AppRoutes />
             <Toaster />
             <Sonner position="top-right" />
-            <ReactQueryDevtools initialIsOpen={false} />
+            {/* <ReactQueryDevtools initialIsOpen={false} /> */}
           </TooltipProvider>
         </ErrorBoundary>
       </BrowserRouter>
