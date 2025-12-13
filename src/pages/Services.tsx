@@ -28,7 +28,14 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -55,10 +62,7 @@ import { useServicesStore } from "@/stores/services/useServicesStore";
 import { useServiceRequestsStore } from "@/stores/service-requests/useServiceRequestsStore";
 import { EditRequestDialog } from "@/components/requests/EditRequestDialog";
 import { requestsApi } from "@/services/api/requestsApi";
-import {
-  Service,
-  ServiceFormData,
-} from "@/types/service.types";
+import { Service, ServiceFormData } from "@/types/service.types";
 import { useCanModify } from "@/hooks/useRole";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { format } from "date-fns";
@@ -89,8 +93,14 @@ export default function Services() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all"); // Changed from activeOnly to statusFilter
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [priceRange, setPriceRange] = useState<{ min: number; max: number }>({ min: 0, max: 10000 });
-  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
+  const [priceRange, setPriceRange] = useState<{ min: number; max: number }>({
+    min: 0,
+    max: 10000,
+  });
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
+    start: "",
+    end: "",
+  });
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [isOpen, setIsOpen] = useState(false);
@@ -99,7 +109,7 @@ export default function Services() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentServiceId, setCurrentServiceId] = useState<string | null>(null);
-  
+
   // State for edit request dialog
   const [isEditRequestDialogOpen, setIsEditRequestDialogOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
@@ -282,8 +292,8 @@ export default function Services() {
   // Sort services
   const sortedAndFilteredServices = React.useMemo(() => {
     // Get unique categories
-    const categories = Array.isArray(services) 
-      ? [...new Set(services.map(s => s.category).filter(Boolean))]
+    const categories = Array.isArray(services)
+      ? [...new Set(services.map((s) => s.category).filter(Boolean))]
       : [];
 
     // Filter services
@@ -296,23 +306,32 @@ export default function Services() {
               ?.toLowerCase()
               .includes(searchTerm.toLowerCase()) ||
             service.category?.toLowerCase().includes(searchTerm.toLowerCase());
-          
-          const matchesStatus = 
-            statusFilter === "all" || 
-            (statusFilter === "active" && service.isActive) || 
+
+          const matchesStatus =
+            statusFilter === "all" ||
+            (statusFilter === "active" && service.isActive) ||
             (statusFilter === "inactive" && !service.isActive);
-          
-          const matchesCategory = selectedCategory === "all" || service.category === selectedCategory;
-          
-          const matchesPrice = 
-            service.basePrice >= priceRange.min && 
+
+          const matchesCategory =
+            selectedCategory === "all" || service.category === selectedCategory;
+
+          const matchesPrice =
+            service.basePrice >= priceRange.min &&
             service.basePrice <= priceRange.max;
-          
-          const matchesDate = 
-            (!dateRange.start || new Date(service.createdAt) >= new Date(dateRange.start)) &&
-            (!dateRange.end || new Date(service.createdAt) <= new Date(dateRange.end));
-          
-          return matchesSearch && matchesStatus && matchesCategory && matchesPrice && matchesDate;
+
+          const matchesDate =
+            (!dateRange.start ||
+              new Date(service.createdAt) >= new Date(dateRange.start)) &&
+            (!dateRange.end ||
+              new Date(service.createdAt) <= new Date(dateRange.end));
+
+          return (
+            matchesSearch &&
+            matchesStatus &&
+            matchesCategory &&
+            matchesPrice &&
+            matchesDate
+          );
         })
       : [];
 
@@ -326,12 +345,20 @@ export default function Services() {
       }
       return 0;
     });
-  }, [services, searchTerm, statusFilter, selectedCategory, priceRange, dateRange, sortConfig]);
+  }, [
+    services,
+    searchTerm,
+    statusFilter,
+    selectedCategory,
+    priceRange,
+    dateRange,
+    sortConfig,
+  ]);
 
   // Get unique categories for filter dropdown
   const categories = React.useMemo(() => {
     if (!Array.isArray(services)) return [];
-    return [...new Set(services.map(s => s.category).filter(Boolean))].sort();
+    return [...new Set(services.map((s) => s.category).filter(Boolean))].sort();
   }, [services]);
 
   // Clear all filters
@@ -446,13 +473,13 @@ export default function Services() {
 
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-            <div className="flex-1">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex-1 min-w-[200px]">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search services by name, description, or category..."
-                  className="pl-10 w-full md:w-96 bg-background border-border/50 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
+                  className="pl-10 w-full md:max-w-md bg-background border-border/50 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
@@ -461,7 +488,7 @@ export default function Services() {
                 />
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
@@ -540,7 +567,9 @@ export default function Services() {
             <div className="p-4 bg-muted/30 border border-border/50 rounded-lg space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3  gap-4">
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-foreground">Category</Label>
+                  <Label className="text-sm font-medium text-foreground">
+                    Category
+                  </Label>
                   <Select
                     value={selectedCategory}
                     onValueChange={(value) => {
@@ -563,14 +592,19 @@ export default function Services() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-foreground">Min Price</Label>
+                  <Label className="text-sm font-medium text-foreground">
+                    Min Price
+                  </Label>
                   <Input
                     type="number"
                     min="0"
                     step="1"
                     value={priceRange.min}
                     onChange={(e) => {
-                      setPriceRange(prev => ({ ...prev, min: Number(e.target.value) || 0 }));
+                      setPriceRange((prev) => ({
+                        ...prev,
+                        min: Number(e.target.value) || 0,
+                      }));
                       setCurrentPage(1);
                     }}
                     placeholder="0"
@@ -579,14 +613,19 @@ export default function Services() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-foreground">Max Price</Label>
+                  <Label className="text-sm font-medium text-foreground">
+                    Max Price
+                  </Label>
                   <Input
                     type="number"
                     min="0"
                     step="1"
                     value={priceRange.max}
                     onChange={(e) => {
-                      setPriceRange(prev => ({ ...prev, max: Number(e.target.value) || 10000 }));
+                      setPriceRange((prev) => ({
+                        ...prev,
+                        max: Number(e.target.value) || 10000,
+                      }));
                       setCurrentPage(1);
                     }}
                     placeholder="10000"
@@ -595,13 +634,18 @@ export default function Services() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-foreground">Date Range</Label>
+                  <Label className="text-sm font-medium text-foreground">
+                    Date Range
+                  </Label>
                   <div className="flex space-x-2">
                     <Input
                       type="date"
                       value={dateRange.start}
                       onChange={(e) => {
-                        setDateRange(prev => ({ ...prev, start: e.target.value }));
+                        setDateRange((prev) => ({
+                          ...prev,
+                          start: e.target.value,
+                        }));
                         setCurrentPage(1);
                       }}
                       className="bg-background border-border/50 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
@@ -610,7 +654,10 @@ export default function Services() {
                       type="date"
                       value={dateRange.end}
                       onChange={(e) => {
-                        setDateRange(prev => ({ ...prev, end: e.target.value }));
+                        setDateRange((prev) => ({
+                          ...prev,
+                          end: e.target.value,
+                        }));
                         setCurrentPage(1);
                       }}
                       className="bg-background border-border/50 transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
@@ -1093,7 +1140,8 @@ export default function Services() {
           } catch (error: any) {
             toast({
               title: "Error",
-              description: error.response?.data?.message || "Failed to update request",
+              description:
+                error.response?.data?.message || "Failed to update request",
               variant: "destructive",
             });
             throw error;

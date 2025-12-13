@@ -31,7 +31,7 @@ const processQueue = (error: any, token: string | null = null) => {
 // Base URL configuration - using relative URL to work with Vite proxy
 // Base URL configuration
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-const baseURL = `${API_URL}/api`;
+const baseURL = import.meta.env.DEV ? `${API_URL}/api/v1` : `${API_URL}/api`;
 
 // Extend InternalAxiosRequestConfig to include _retry flag
 interface RetryConfig extends InternalAxiosRequestConfig {
@@ -108,6 +108,11 @@ apiClient.interceptors.response.use(
 
     // If error is not a 401 or we've already retried, reject
     if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
+    }
+
+    // Don't attempt to refresh token for login requests
+    if (originalRequest.url?.includes("/auth/login")) {
       return Promise.reject(error);
     }
 

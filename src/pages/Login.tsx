@@ -10,9 +10,15 @@ import {
   Moon,
   Sun,
   Loader2,
-  AlertCircle,
   Mail,
+  Eye,
+  EyeOff,
 } from "lucide-react";
+import { toast } from "sonner";
+
+// Assets
+import heroImage from "@/assets/hero-dashboard.jpg";
+import navLogo from "@/assets/logo.png";
 import { useTheme } from "next-themes";
 import { useAuthStore } from "@/stores/auth/useAuthStore";
 import { authService } from "@/services/api/authService";
@@ -20,12 +26,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/components/ui/use-toast";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-
-// Assets
-import heroImage from "@/assets/hero-dashboard.jpg";
-import navLogo from "@/assets/logo.png";
 
 interface LoginFormData {
   email: string;
@@ -35,7 +35,6 @@ interface LoginFormData {
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { toast } = useToast();
 
   // Get theme and auth state
   const { theme, setTheme } = useTheme();
@@ -56,7 +55,7 @@ const Login = () => {
 
   // Local state
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setErrorState] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -96,7 +95,8 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     setIsLoading(true);
-    setErrorState(null);
+    setLoading(true);
+    setIsLoading(true);
 
     try {
       const response = await authService.login(formData);
@@ -116,8 +116,7 @@ const Login = () => {
 
       setAuth(user, tokens);
 
-      toast({
-        title: "Login successful",
+      toast.success("Login successful", {
         description: `Welcome back, ${user.fName || "User"}!`,
       });
 
@@ -129,14 +128,25 @@ const Login = () => {
         stack: error.stack,
       });
 
-      const errorMessage =
-        error.response?.data?.message || error.message || "Login failed";
-      setErrorState(errorMessage);
+      let title = "Login failed";
+      let description =
+        error.response?.data?.message || "An unexpected error occurred";
 
-      toast({
-        title: "Login failed",
-        description: errorMessage,
-        variant: "destructive",
+      // Smart error handling
+      if (!error.response) {
+        title = "Connection Error";
+        description =
+          "Unable to reach the server. Please check your internet connection.";
+      } else if (error.response.status === 401) {
+        title = "Invalid Credentials";
+        description = "Incorrect email or password. Please try again.";
+      } else if (error.response.status === 403) {
+        title = "Access Denied";
+        // Keep the specific message from backend (e.g., "Account pending approval")
+      }
+
+      toast.error(title, {
+        description,
       });
     } finally {
       setLoading(false);
@@ -244,12 +254,6 @@ const Login = () => {
                 <h2 className="text-2xl font-bold text-foreground">
                   Welcome back
                 </h2>
-                {error && (
-                  <Alert variant="destructive" className="mb-4">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
                 <p className="text-sm text-muted-foreground">
                   Sign in to manage your Xrt-tech dashboard
                 </p>
@@ -279,13 +283,29 @@ const Login = () => {
                     <Input
                       id="password"
                       name="password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       value={formData.password}
                       onChange={handleChange}
                       required
-                      className="pl-10"
+                      className="pl-10 pr-10"
                       placeholder="••••••••"
                     />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className="sr-only">
+                        {showPassword ? "Hide password" : "Show password"}
+                      </span>
+                    </Button>
                   </div>
                 </div>
                 <Button
