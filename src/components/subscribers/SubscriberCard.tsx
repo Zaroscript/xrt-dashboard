@@ -103,7 +103,7 @@ interface SubscriberCardProps {
       | "pending_approval"
       | "active"
       | "expired"
-      | "cancelled"
+      | "canceled"
       | "rejected"
       | "suspended"
   ) => Promise<void>;
@@ -158,7 +158,7 @@ const SubscriberCard = ({
         return {
           name: planObj.name || "Unknown Plan",
           billingCycle: planObj.billingCycle || "monthly",
-          price: currentSubscriber.plan.price ?? planObj.price ?? 0,
+          price: currentSubscriber.price ?? planObj.price ?? 0,
         };
       }
 
@@ -280,7 +280,7 @@ const SubscriberCard = ({
       | "pending_approval"
       | "active"
       | "expired"
-      | "cancelled"
+      | "canceled"
       | "rejected"
       | "suspended",
     reason: string = ""
@@ -299,7 +299,7 @@ const SubscriberCard = ({
         } else {
           await activateSubscriber(subscriber._id);
         }
-      } else if (newStatus === "cancelled") {
+      } else if (newStatus === "canceled") {
         await cancelSubscription(subscriber._id, reason);
       } else if (newStatus === "rejected") {
         await rejectSubscriber(subscriber._id, reason);
@@ -480,11 +480,11 @@ const SubscriberCard = ({
         description: "Subscription period has ended",
         action: "Renew",
       },
-      cancelled: {
+      canceled: {
         color:
           "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700",
         icon: XCircle,
-        description: "Subscription was cancelled by user or admin",
+        description: "Subscription was canceled by user or admin",
         action: "Reactivate",
       },
       rejected: {
@@ -517,10 +517,10 @@ const SubscriberCard = ({
     ...(status === "active"
       ? [
           { label: "Suspend", value: "suspended" as const, icon: Pause },
-          { label: "Cancel", value: "cancelled" as const, icon: XCircle },
+          { label: "Cancel", value: "canceled" as const, icon: XCircle },
         ]
-      : (["suspended", "cancelled", "expired", "rejected"] as const).includes(
-          status as "suspended" | "cancelled" | "expired" | "rejected"
+      : (["suspended", "canceled", "expired", "rejected"] as const).includes(
+          status as "suspended" | "canceled" | "expired" | "rejected"
         )
       ? [{ label: "Reactivate", value: "active" as const, icon: Play }]
       : status === "pending_approval"
@@ -549,7 +549,7 @@ const SubscriberCard = ({
     if (
       [
         "active",
-        "cancelled",
+        "canceled",
         "pending_approval",
         "expired",
         "rejected",
@@ -559,11 +559,11 @@ const SubscriberCard = ({
       await handleStatusChange(
         action as
           | "active"
-          | "cancelled"
+          | "canceled"
           | "pending_approval"
           | "expired"
           | "rejected",
-        action === "cancelled"
+        action === "canceled"
           ? `Cancelled by ${authUser?.fName || "Admin"} ${
               authUser?.lName || ""
             }`.trim()
@@ -628,7 +628,7 @@ const SubscriberCard = ({
         return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800";
       case "suspended":
         return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800";
-      case "cancelled":
+      case "canceled":
         return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800";
       case "pending_approval":
         return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800";
@@ -683,7 +683,7 @@ const SubscriberCard = ({
                         ? "bg-orange-500"
                         : status === "pending_approval"
                         ? "bg-amber-500"
-                        : status === "cancelled"
+                        : status === "canceled"
                         ? "bg-slate-500"
                         : status === "expired"
                         ? "bg-red-500"
@@ -770,7 +770,7 @@ const SubscriberCard = ({
                           Suspend Subscription
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => handleAction("cancelled")}
+                          onClick={() => handleAction("canceled")}
                           disabled={isLoading || isDeleting}
                           className="text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"
                         >
@@ -781,7 +781,7 @@ const SubscriberCard = ({
                     )}
 
                     {(status === "suspended" ||
-                      status === "cancelled" ||
+                      status === "canceled" ||
                       status === "expired" ||
                       status === "rejected") && (
                       <DropdownMenuItem

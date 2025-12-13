@@ -38,9 +38,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAppSelector, useAppDispatch } from "@/store/store";
-import { setTickets, updateTicket } from "@/store/slices/supportSlice";
-import type { SupportTicket } from "@/store/slices/supportSlice";
+import { useTicketsStore } from "@/stores/tickets/useTicketsStore";
+import type { Ticket as SupportTicket } from "@/stores/types";
 
 const TicketCard = ({
   ticket,
@@ -98,11 +97,11 @@ const TicketCard = ({
       responses: [
         ...ticket.responses,
         {
-          id: Date.now().toString(),
+          _id: Date.now().toString(),
           message: newResponse,
           isAdmin: true,
-          timestamp: new Date().toISOString(),
-          adminName: "Admin User",
+          user: "Admin",
+          createdAt: new Date(),
         },
       ],
       status: "in_progress" as const,
@@ -125,10 +124,15 @@ const TicketCard = ({
             <div className="flex items-start space-x-4">
               <Avatar className="h-10 w-10">
                 <AvatarImage
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${ticket.userEmail}`}
+                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${
+                    typeof ticket.user === "object" ? ticket.user.email : "user"
+                  }`}
                 />
                 <AvatarFallback>
-                  {ticket.userName
+                  {(typeof ticket.user === "object"
+                    ? `${ticket.user.fName} ${ticket.user.lName}`
+                    : "U"
+                  )
                     .split(" ")
                     .map((n) => n[0])
                     .join("")}
@@ -137,13 +141,19 @@ const TicketCard = ({
 
               <div className="space-y-1">
                 <h3 className="font-semibold text-foreground">
-                  {ticket.subject}
+                  {ticket.title}
                 </h3>
                 <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                   <User className="w-4 h-4" />
-                  <span>{ticket.userName}</span>
+                  <span>
+                    {typeof ticket.user === "object"
+                      ? `${ticket.user.fName} ${ticket.user.lName}`
+                      : "User"}
+                  </span>
                   <span>•</span>
-                  <span>{ticket.userEmail}</span>
+                  <span>
+                    {typeof ticket.user === "object" ? ticket.user.email : ""}
+                  </span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Badge className={getStatusColor(ticket.status)}>
@@ -214,9 +224,9 @@ const TicketCard = ({
 
               {showResponses && (
                 <div className="space-y-3 max-h-60 overflow-y-auto">
-                  {ticket.responses.map((response) => (
+                  {ticket.responses.map((response, index) => (
                     <div
-                      key={response.id}
+                      key={response._id || index}
                       className={`p-3 rounded-lg ${
                         response.isAdmin
                           ? "bg-primary/10 border-l-2 border-primary"
@@ -226,11 +236,13 @@ const TicketCard = ({
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium">
                           {response.isAdmin
-                            ? response.adminName
-                            : ticket.userName}
+                            ? "Admin User"
+                            : typeof ticket.user === "object"
+                            ? `${ticket.user.fName} ${ticket.user.lName}`
+                            : "User"}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {new Date(response.timestamp).toLocaleDateString()}
+                          {new Date(response.createdAt).toLocaleDateString()}
                         </span>
                       </div>
                       <p className="text-sm text-foreground">
@@ -269,20 +281,39 @@ const TicketCard = ({
 };
 
 const Support = () => {
-  const dispatch = useAppDispatch();
-  const { tickets, filter, loading } = useAppSelector((state) => state.support);
+  const {
+    tickets,
+    statusFilter,
+    loading,
+    setTickets,
+    updateTicket,
+    setStatusFilter,
+  } = useTicketsStore();
   const [searchTerm, setSearchTerm] = useState("");
+
+  const filter = statusFilter;
 
   useEffect(() => {
     // Simulate loading support tickets
     setTimeout(() => {
       const mockTickets: SupportTicket[] = [
         {
-          id: "1",
-          userId: "1",
-          userName: "Sarah Wilson",
-          userEmail: "sarah@restaurant.com",
-          subject: "Recipe import not working",
+          _id: "1",
+          user: {
+            _id: "1",
+            fName: "Sarah",
+            lName: "Wilson",
+            email: "sarah@restaurant.com",
+            role: "client",
+            isActive: true,
+            isApproved: true,
+            createdAt: "2024-01-01T00:00:00Z",
+            updatedAt: "2024-01-01T00:00:00Z",
+            companyName: "Restaurant",
+            phone: "123",
+            refreshTokens: [],
+          },
+          title: "Recipe import not working",
           message:
             "I'm having trouble importing recipes from my old website. The CSV upload keeps failing with an error message.",
           status: "open",
@@ -290,85 +321,118 @@ const Support = () => {
           responses: [],
           createdAt: "2024-01-20T10:30:00Z",
           updatedAt: "2024-01-20T10:30:00Z",
+          category: "technical",
+          isActive: true,
         },
         {
-          id: "2",
-          userId: "2",
-          userName: "Mike Johnson",
-          userEmail: "mike@bistro.com",
-          subject: "Custom domain setup help",
+          _id: "2",
+          user: {
+            _id: "2",
+            fName: "Mike",
+            lName: "Johnson",
+            email: "mike@bistro.com",
+            role: "client",
+            isActive: true,
+            isApproved: true,
+            createdAt: "2024-01-01T00:00:00Z",
+            updatedAt: "2024-01-01T00:00:00Z",
+            companyName: "Bistro",
+            phone: "123",
+            refreshTokens: [],
+          },
+          title: "Custom domain setup help",
           message:
             "I need assistance setting up my custom domain for my recipe website. I have the domain but need help with DNS configuration.",
           status: "in_progress",
           priority: "medium",
           responses: [
             {
-              id: "1",
               message:
                 "Hi Mike, I can help you with the domain setup. Could you please provide your domain name and current DNS provider?",
               isAdmin: true,
-              timestamp: "2024-01-20T11:00:00Z",
-              adminName: "Admin Support",
+              user: "Admin Support",
+              createdAt: new Date("2024-01-20T11:00:00Z"),
             },
             {
-              id: "2",
               message:
                 "The domain is mybistro.com and I'm using GoDaddy as my DNS provider.",
               isAdmin: false,
-              timestamp: "2024-01-20T11:15:00Z",
+              user: "Mike Johnson",
+              createdAt: new Date("2024-01-20T11:15:00Z"),
             },
           ],
           createdAt: "2024-01-20T09:15:00Z",
           updatedAt: "2024-01-20T11:15:00Z",
+          category: "technical",
+          isActive: true,
         },
         {
-          id: "3",
-          userId: "3",
-          userName: "Emily Davis",
-          userEmail: "emily@foodblog.com",
-          subject: "Payment method update",
+          _id: "3",
+          user: {
+            _id: "3",
+            fName: "Emily",
+            lName: "Davis",
+            email: "emily@foodblog.com",
+            role: "client",
+            isActive: true,
+            isApproved: true,
+            createdAt: "2024-01-01T00:00:00Z",
+            updatedAt: "2024-01-01T00:00:00Z",
+            companyName: "FoodBlog",
+            phone: "123",
+            refreshTokens: [],
+          },
+          title: "Payment method update",
           message:
             "I need to update my payment method for my subscription. My current card is expiring soon.",
           status: "resolved",
           priority: "low",
           responses: [
             {
-              id: "1",
               message:
                 "You can update your payment method in your account settings under the billing section. Let me know if you need any assistance.",
               isAdmin: true,
-              timestamp: "2024-01-19T14:30:00Z",
-              adminName: "Admin Support",
+              user: "Admin Support",
+              createdAt: new Date("2024-01-19T14:30:00Z"),
             },
             {
-              id: "2",
               message:
                 "Perfect, I found it and updated successfully. Thank you!",
               isAdmin: false,
-              timestamp: "2024-01-19T14:45:00Z",
+              user: "Emily Davis",
+              createdAt: new Date("2024-01-19T14:45:00Z"),
             },
           ],
           createdAt: "2024-01-19T14:20:00Z",
           updatedAt: "2024-01-19T14:45:00Z",
+          category: "billing",
+          isActive: true,
         },
       ];
 
-      dispatch(setTickets(mockTickets));
+      setTickets(mockTickets);
     }, 1000);
-  }, [dispatch]);
+  }, [setTickets]);
 
   const filteredTickets = tickets.filter((ticket) => {
     const matchesSearch =
-      ticket.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.userEmail.toLowerCase().includes(searchTerm.toLowerCase());
+      (ticket.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (typeof ticket.user === "object"
+        ? `${ticket.user.fName} ${ticket.user.lName}`
+        : ""
+      )
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (typeof ticket.user === "object" ? ticket.user.email : "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
     const matchesFilter = filter === "all" || ticket.status === filter;
 
     return matchesSearch && matchesFilter;
   });
 
   const handleTicketUpdate = (updatedTicket: SupportTicket) => {
-    dispatch(updateTicket(updatedTicket));
+    updateTicket(updatedTicket._id, updatedTicket);
   };
 
   const stats = {
@@ -481,9 +545,9 @@ const Support = () => {
 
         <Select
           value={filter}
-          onValueChange={(value: 'all' | 'open' | 'in_progress' | 'resolved' | 'closed') =>
-            dispatch({ type: "support/setFilter", payload: value })
-          }
+          onValueChange={(
+            value: "all" | "open" | "in_progress" | "resolved" | "closed"
+          ) => setStatusFilter(value)}
         >
           <SelectTrigger className="w-full sm:w-48 glass-card">
             <Filter className="w-4 h-4 mr-2" />
@@ -503,7 +567,7 @@ const Support = () => {
       <div className="grid grid-cols-1 gap-6">
         {filteredTickets.map((ticket, index) => (
           <motion.div
-            key={ticket.id}
+            key={ticket._id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}

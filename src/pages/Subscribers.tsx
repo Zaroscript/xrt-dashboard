@@ -16,7 +16,7 @@ import { useSubscribersStore } from "@/stores/subscribers/useSubscribersStore";
 import { useClientsStore } from "@/stores/clients/useClientsStore";
 import SubscriberCard from "@/components/subscribers/SubscriberCard";
 import { AddSubscriberDialog } from "@/components/subscribers/AddSubscriberDialog";
-import { useExportClients } from "@/hooks/useExportClients";
+import { useExportSubscribers } from "@/hooks/useExportSubscribers"; // Added this import
 import { useCanModify } from "@/hooks/useRole";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -87,8 +87,8 @@ const Subscribers = () => {
       if (!plan || subscriber.status !== "active") return sum;
 
       const billingCycle =
-        subscriber.plan.billingCycle || plan.billingCycle || "monthly";
-      let price = subscriber.plan.customPrice || plan.price || 0;
+        subscriber.billingCycle || plan.billingCycle || "monthly";
+      let price = subscriber.price || plan.price || 0;
 
       // Normalize to monthly
       if (billingCycle === "annually" || billingCycle === "yearly") {
@@ -134,7 +134,7 @@ const Subscribers = () => {
       | "pending_approval"
       | "active"
       | "expired"
-      | "cancelled"
+      | "canceled"
       | "rejected"
       | "suspended"
   ) => {
@@ -159,7 +159,7 @@ const Subscribers = () => {
   const [editingSubscriber, setEditingSubscriber] = useState<Subscriber | null>(
     null
   );
-  const { isExporting, exportToCSV } = useExportClients();
+  const { isExporting, exportToCSV } = useExportSubscribers();
 
   // Handle sync subscribers from clients
   const handleSyncSubscribers = async () => {

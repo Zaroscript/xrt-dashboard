@@ -61,11 +61,14 @@ export interface Client {
   revenue: number;
   createdAt: string;
   updatedAt: string;
-  services?: Array<ServiceRef | string>;
+  services?: Array<
+    ServiceRef | string | import("./service.types").AssignedService
+  >;
   currentPlan?: PlanRef | string;
   subscription?: {
+    _id?: string;
     plan: PlanRef | string;
-    status: "active" | "cancelled" | "expired" | "pending";
+    status: "active" | "canceled" | "expired" | "pending";
     amount: number;
     startDate: string;
     expiresAt: string;

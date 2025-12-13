@@ -51,7 +51,7 @@ const clientFormSchema = z.object({
     .object({
       plan: z.string().optional(),
       status: z
-        .enum(["active", "cancelled", "expired", "pending"] as const)
+        .enum(["active", "canceled", "expired", "pending"] as const)
         .optional(),
       expiresAt: z.string().optional(),
       amount: z.number().optional(),
@@ -144,26 +144,28 @@ export default function ClientProfile() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>("");
+  const [isChangingPlan, setIsChangingPlan] = useState(false);
   const [isLocalLoading, setIsLocalLoading] = useState(true); // Track local loading state
 
   // Fetch client data
-  useEffect(() => {
+  const fetchClientData = async () => {
     if (!isNewClient && id) {
-      const loadClient = async () => {
-        setIsLocalLoading(true);
-        try {
-          const clientData = await fetchClient(id as string);
-          setClient(clientData);
-        } catch (error) {
-          console.error("Failed to fetch client:", error);
-        } finally {
-          setIsLocalLoading(false);
-        }
-      };
-      loadClient();
+      setIsLocalLoading(true);
+      try {
+        const clientData = await fetchClient(id as string);
+        setClient(clientData);
+      } catch (error) {
+        console.error("Failed to fetch client:", error);
+      } finally {
+        setIsLocalLoading(false);
+      }
     } else {
       setIsLocalLoading(false);
     }
+  };
+
+  useEffect(() => {
+    fetchClientData();
   }, [id, isNewClient, fetchClient]);
 
   // Fetch plans data
@@ -272,7 +274,7 @@ export default function ClientProfile() {
         plan: data.subscription.plan,
         status: data.subscription.status as
           | "active"
-          | "cancelled"
+          | "canceled"
           | "expired"
           | "pending",
         amount: data.subscription.amount,
@@ -477,14 +479,20 @@ export default function ClientProfile() {
       {client && (
         <SubscriptionCard
           clientId={id as string}
-          subscription={client.subscription}
+          subscription={
+            client.subscription
+              ? ({
+                  ...client.subscription,
+                  _id:
+                    client.subscription._id ||
+                    "sub_" + Math.random().toString(36).substr(2, 9),
+                } as any)
+              : null
+          }
+          onUpdate={fetchClientData}
           client={client}
-          onUpdate={async () => {
-            if (id) {
-              const updatedClient = await fetchClient(id as string);
-              setClient(updatedClient);
-            }
-          }}
+          showAssignDialog={isAssignServiceOpen}
+          onShowAssignDialogChange={setIsAssignServiceOpen}
         />
       )}
 
@@ -492,11 +500,8 @@ export default function ClientProfile() {
       {client && (
         <ClientServicesCard
           clientId={id as string}
-          services={client.services || []}
-          onUpdate={async () => {
-            const updatedClient = await fetchClient(id as string);
-            setClient(updatedClient);
-          }}
+          services={(client.services || []) as any[]}
+          onUpdate={fetchClientData}
           onAddService={() => setIsAssignServiceOpen(true)}
         />
       )}
@@ -537,7 +542,10 @@ export default function ClientProfile() {
         onOpenChange={setIsResetPasswordOpen}
         clientId={id as string}
         clientName={
-          (client?.user && typeof client.user === "object" && client.user?.fName && client.user?.lName
+          (client?.user &&
+          typeof client.user === "object" &&
+          client.user?.fName &&
+          client.user?.lName
             ? `${client.user.fName} ${client.user.lName}`
             : null) ||
           client?.companyName ||

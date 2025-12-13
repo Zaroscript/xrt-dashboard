@@ -12,7 +12,7 @@ interface SubscribersState {
     | "all"
     | "active"
     | "inactive"
-    | "cancelled"
+    | "canceled"
     | "suspended"
     | "pending_approval"
     | "expired"
@@ -36,7 +36,7 @@ interface SubscribersActions {
       | "all"
       | "active"
       | "inactive"
-      | "cancelled"
+      | "canceled"
       | "suspended"
       | "pending_approval"
       | "expired"
@@ -82,7 +82,7 @@ interface SubscribersActions {
     total: number;
     active: number;
     inactive: number;
-    cancelled: number;
+    canceled: number;
     suspended: number;
   };
 
@@ -250,7 +250,7 @@ export const useSubscribersStore = create<SubscribersStore>()(
         try {
           await get().updateSubscriberApi(id, {
             status: "active",
-            isActive: true,
+            isSubscriptionActive: true,
           });
         } catch (error) {
           console.error("Error activating subscriber:", error);
@@ -262,7 +262,7 @@ export const useSubscribersStore = create<SubscribersStore>()(
         try {
           await get().updateSubscriberApi(id, {
             status: "inactive",
-            isActive: false,
+            isSubscriptionActive: false,
           });
         } catch (error) {
           console.error("Error deactivating subscriber:", error);
@@ -286,8 +286,8 @@ export const useSubscribersStore = create<SubscribersStore>()(
       cancelSubscription: async (id, reason) => {
         try {
           const updateData: Partial<Subscriber> = {
-            status: "cancelled",
-            isActive: false,
+            status: "canceled",
+            isSubscriptionActive: false,
             ...(reason && { cancellationReason: reason }),
           };
 
@@ -302,8 +302,7 @@ export const useSubscribersStore = create<SubscribersStore>()(
             updateData.plan = {
               ...subscriber.plan,
               plan: planId,
-              status: "cancelled",
-              notes: reason || subscriber.plan.notes,
+              status: "canceled",
             };
           }
 
@@ -453,7 +452,7 @@ export const useSubscribersStore = create<SubscribersStore>()(
 
       getCanceledSubscribers: () => {
         return get().subscribers.filter(
-          (subscriber) => subscriber.status === "cancelled"
+          (subscriber) => subscriber.status === "canceled"
         );
       },
 
@@ -469,7 +468,7 @@ export const useSubscribersStore = create<SubscribersStore>()(
           total: subscribers.length,
           active: subscribers.filter((s) => s.status === "active").length,
           inactive: subscribers.filter((s) => s.status === "inactive").length,
-          cancelled: subscribers.filter((s) => s.status === "cancelled").length,
+          canceled: subscribers.filter((s) => s.status === "canceled").length,
           suspended: subscribers.filter((s) => s.status === "suspended").length,
           pending_approval: subscribers.filter(
             (s) => s.status === "pending_approval"

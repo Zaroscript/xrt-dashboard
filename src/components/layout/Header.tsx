@@ -35,14 +35,15 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Provide default user object if not authenticated
   const safeUser: User = user || {
-    _id: 'guest',
-    email: 'guest@example.com',
-    fName: 'Guest',
-    lName: 'User',
-    role: 'client',
+    _id: "guest",
+    email: "guest@example.com",
+    fName: "Guest",
+    lName: "User",
+    role: "client",
     isApproved: true,
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    refreshTokens: [],
   };
 
   const handleLogout = async () => {
@@ -52,7 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
       }
       navigate("/dashboard");
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error("Logout error:", error);
     }
   };
 
@@ -115,12 +116,21 @@ export const Header: React.FC<HeaderProps> = ({
                 className="relative h-10 w-10 rounded-full"
               >
                 <Avatar className="h-8 w-8">
-                  <AvatarImage 
-                    src={getAvatarUrl(safeUser.avatar)} 
-                    alt={`${safeUser.fName || ''} ${safeUser.lName || ''}`.trim() || 'User'}
+                  <AvatarImage
+                    src={getAvatarUrl(safeUser.avatar)}
+                    alt={
+                      `${safeUser.fName || ""} ${
+                        safeUser.lName || ""
+                      }`.trim() || "User"
+                    }
                   />
                   <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                    {safeUser.initials || getUserInitials(safeUser.fName, safeUser.lName, safeUser.email)}
+                    {safeUser.initials ||
+                      getUserInitials(
+                        safeUser.fName,
+                        safeUser.lName,
+                        safeUser.email
+                      )}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -134,15 +144,19 @@ export const Header: React.FC<HeaderProps> = ({
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none">
-                  {`${safeUser.fName || ''} ${safeUser.lName || ''}`.trim() || 'Guest User'}
+                  {`${safeUser.fName || ""} ${safeUser.lName || ""}`.trim() ||
+                    "Guest User"}
                 </p>
                 <span className="text-sm text-muted-foreground">
-                  {safeUser.email || 'guest@example.com'}
+                  {safeUser.email || "guest@example.com"}
                 </span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate("/dashboard/settings")} className="cursor-pointer">
+            <DropdownMenuItem
+              onClick={() => navigate("/dashboard/settings")}
+              className="cursor-pointer"
+            >
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>

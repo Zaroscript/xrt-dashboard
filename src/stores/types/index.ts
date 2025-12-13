@@ -4,11 +4,12 @@ import type {
   Address,
   ServiceRef,
   PlanRef,
+  Client,
 } from "@/types/client.types";
 import type { Plan } from "@/types/plan";
 
 // Re-export UserRef for use in components
-export type { UserRef };
+export type { UserRef, Client };
 
 export interface User {
   _id: string;
@@ -28,35 +29,13 @@ export interface User {
   permissions?: string[];
   avatar?: string;
   initials?: string;
+  bio?: string;
+  businessLocation?: Address;
+  address?: string;
+  notes?: string;
 }
 
-export interface Client {
-  _id: string;
-  user: UserRef | string;
-  companyName: string;
-  businessLocation: Address;
-  oldWebsite?: string;
-  taxId?: string;
-  notes?: string;
-  isActive: boolean;
-  services?: Array<ServiceRef | string>;
-  currentPlan?: PlanRef | string;
-  subscription?: {
-    plan: PlanRef | string;
-    status: "active" | "canceled" | "expired" | "pending";
-    amount: number;
-    startDate: string;
-    expiresAt: string;
-    billingCycle?: "monthly" | "yearly";
-  };
-  createdAt: string;
-  updatedAt: string;
-  fullAddress?: string;
-  isClient?: boolean;
-  lastActive?: string;
-  revenue?: number;
-  status?: string;
-}
+// Client interface re-exported from @/types/client.types
 
 export interface Service {
   _id: string;
@@ -159,6 +138,7 @@ export interface Ticket {
   priority: "low" | "medium" | "high" | "urgent";
   category?: string;
   responses: Array<{
+    _id?: string;
     message: string;
     user: User | string;
     isAdmin: boolean;
@@ -256,7 +236,7 @@ export interface Subscriber {
   suspensionReason?: string;
   cancellationReason?: string;
   paymentMethod?: string;
-  subscriptionHistory: any[];
+  planHistory: any[];
   paymentHistory: Array<{
     amount: number;
     date: Date;
@@ -293,6 +273,7 @@ export interface Subscriber {
 
 export interface Tokens {
   accessToken: string;
+  refreshToken?: string;
 }
 
 // API Response types

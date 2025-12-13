@@ -33,7 +33,6 @@ const processQueue = (error: any, token: string | null = null) => {
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const baseURL = `${API_URL}/api/v1`;
 
-
 // Extend InternalAxiosRequestConfig to include _retry flag
 interface RetryConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -147,14 +146,19 @@ apiClient.interceptors.response.use(
     isRefreshing = true;
 
     try {
-      // Refresh the token using cookies (server will get it from req.cookies.jwt)
+      // Refresh the token using the refresh token from the store
+      const { tokens } = useAuthStore.getState();
+
+      if (!tokens?.refreshToken) {
+        throw new Error("No refresh token available");
+      }
 
       const response = await apiClient.post<{
         accessToken: string;
         refreshToken: string;
       }>(
         "/auth/refresh-token",
-        {},
+        { refreshToken: tokens.refreshToken },
         {
           withCredentials: true, // Important for sending cookies
         }

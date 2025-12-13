@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { Client } from "../types";
+import type { Client } from "../types";
 import { STORE_VERSIONS } from "../types";
 import { apiClient } from "../../services/api/apiClient";
 import { useSubscribersStore } from "../subscribers/useSubscribersStore";

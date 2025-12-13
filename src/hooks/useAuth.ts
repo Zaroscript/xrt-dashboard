@@ -1,13 +1,13 @@
-import { useEffect, useCallback, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { toast } from 'sonner';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuthStore } from '@/stores/auth/useAuthStore';
-import authService, { type LoginResponse } from '@/services/api/authService';
-import type { User } from '@/stores/types';
+import { useEffect, useCallback, useMemo } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuthStore } from "@/stores/auth/useAuthStore";
+import authService, { type LoginResponse } from "@/services/api/authService";
+import type { User } from "@/stores/types";
 
 // List of admin roles that can access admin routes
-const ADMIN_ROLES = ['super_admin', 'admin', 'moderator'];
+const ADMIN_ROLES = ["super_admin", "admin", "moderator"];
 
 // Check if user has admin privileges
 const hasAdminRole = (role?: string) => {
@@ -18,30 +18,29 @@ export const useAuth = (requireAuth = true, requireAdmin = false) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   // Get auth state from Zustand store
-  const { 
-    isAuthenticated, 
-    user, 
-    tokens, 
-    setAuth, 
-    logout: logoutFromStore, 
-    setLoading, 
-    setError: setAuthError 
+  const {
+    isAuthenticated,
+    user,
+    tokens,
+    setAuth,
+    logout: logoutFromStore,
+    setLoading,
+    setError: setAuthError,
   } = useAuthStore();
-  
+
   // Fetch current user data
-  const { 
-    data: meData, 
-    error: meError, 
+  const {
+    data: meData,
+    error: meError,
     isLoading: isMeLoading,
-    refetch: refetchUser
+    refetch: refetchUser,
   } = useQuery<{
     user: User;
     clientProfile?: any;
-    tokens: { accessToken: string; refreshToken: string };
   }>({
-    queryKey: ['me'],
+    queryKey: ["me"],
     queryFn: () => authService.getMe(),
     enabled: !!tokens?.accessToken,
     retry: 1,
@@ -50,15 +49,17 @@ export const useAuth = (requireAuth = true, requireAdmin = false) => {
   // Update auth state when user data is fetched
   useEffect(() => {
     if (meData) {
-      setAuth(meData.user, meData.tokens);
+      // If we are strictly updating user data from getMe, we might not get new tokens.
+      // Use existing tokens if available.
+      setAuth(meData.user, tokens || { accessToken: "" });
     }
   }, [meData, setAuth]);
 
   // Handle errors
   useEffect(() => {
     if (meError) {
-      console.error('Failed to fetch user:', meError);
-      setAuthError('Failed to fetch user data');
+      console.error("Failed to fetch user:", meError);
+      setAuthError("Failed to fetch user data");
     }
   }, [meError, setAuthError]);
 
@@ -80,7 +81,7 @@ export const useAuth = (requireAuth = true, requireAdmin = false) => {
 
       // If we have an error, we're not authenticated
       if (meError) {
-        console.error('Auth check failed:', meError);
+        console.error("Auth check failed:", meError);
         return false;
       }
 
@@ -97,20 +98,20 @@ export const useAuth = (requireAuth = true, requireAdmin = false) => {
     const verifyAuth = async () => {
       const isAuth = await checkAuth();
       const isAdmin = hasAdminRole(user?.role);
-      
+
       // Redirect to login if not authenticated and not already on login page
-      if (!isAuth && location.pathname !== '/login') {
-        navigate('/login', { 
-          state: { 
+      if (!isAuth && location.pathname !== "/login") {
+        navigate("/login", {
+          state: {
             from: location,
-            message: 'Please log in to continue' 
-          } 
+            message: "Please log in to continue",
+          },
         });
       }
-      
+
       // Redirect to dashboard if already authenticated and on login page
-      if (isAuth && location.pathname === '/login') {
-        const from = (location.state as any)?.from?.pathname || '/dashboard';
+      if (isAuth && location.pathname === "/login") {
+        const from = (location.state as any)?.from?.pathname || "/dashboard";
         navigate(from, { replace: true });
       }
     };
@@ -125,10 +126,10 @@ export const useAuth = (requireAuth = true, requireAdmin = false) => {
       await authService.logout();
       logoutFromStore();
       queryClient.clear();
-      navigate('/login', { replace: true });
+      navigate("/login", { replace: true });
     } catch (error) {
-      console.error('Logout failed:', error);
-      setAuthError('Failed to log out. Please try again.');
+      console.error("Logout failed:", error);
+      setAuthError("Failed to log out. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -143,18 +144,26 @@ export const useAuth = (requireAuth = true, requireAdmin = false) => {
 
     if (requireAuth && !isAuthenticated) {
       // Only redirect if not already on login page
-      if (location.pathname !== '/login') {
-        navigate('/login', { 
+      if (location.pathname !== "/login") {
+        navigate("/login", {
           state: { from: location },
-          replace: true 
+          replace: true,
         });
       }
     } else if (requireAdmin && isAuthenticated && !isAdmin) {
       // Redirect to dashboard if user is not an admin but admin access is required
-      navigate('/dashboard', { replace: true });
-      toast.error('You do not have permission to access this page.');
+      navigate("/dashboard", { replace: true });
+      toast.error("You do not have permission to access this page.");
     }
-  }, [isAuthenticated, isLoading, isAdmin, requireAuth, requireAdmin, navigate, location]);
+  }, [
+    isAuthenticated,
+    isLoading,
+    isAdmin,
+    requireAuth,
+    requireAdmin,
+    navigate,
+    location,
+  ]);
 
   return {
     isAuthenticated,
@@ -162,7 +171,11 @@ export const useAuth = (requireAuth = true, requireAdmin = false) => {
     tokens,
     isAdmin,
     isLoading,
-    error: meError ? new Error(meError instanceof Error ? meError.message : 'Authentication error') : null,
+    error: meError
+      ? new Error(
+          meError instanceof Error ? meError.message : "Authentication error"
+        )
+      : null,
     logout,
     checkAuth,
     hasAdminRole,

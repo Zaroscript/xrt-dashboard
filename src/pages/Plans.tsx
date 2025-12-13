@@ -171,7 +171,7 @@ const Plans = () => {
   const [filters, setFilters] = useState<PlanFilter>({
     status: "all",
     search: "",
-    sortBy: "name",
+    sortBy: "displayOrder",
     sortOrder: "asc",
   });
 
@@ -280,6 +280,10 @@ const Plans = () => {
           aValue = new Date(a.updatedAt || a.createdAt || 0);
           bValue = new Date(b.updatedAt || b.createdAt || 0);
           break;
+        case "displayOrder":
+          aValue = a.displayOrder || 0;
+          bValue = b.displayOrder || 0;
+          break;
         default:
           aValue = a.name.toLowerCase();
           bValue = b.name.toLowerCase();
@@ -378,6 +382,8 @@ const Plans = () => {
             features: data.features || [],
             duration: data.duration || 1,
             isActive: data.isActive ?? true,
+            isCustom: data.isCustom ?? false,
+            displayOrder: data.displayOrder || 0,
             calculatedMonthlyPrice: monthlyPrice,
             calculatedYearlyPrice: yearlyPrice,
             billingCycle: data.duration === 12 ? "yearly" : "monthly",
@@ -412,6 +418,8 @@ const Plans = () => {
           duration: data.duration || 1,
           features: data.features || [],
           isActive: data.isActive ?? true,
+          isCustom: data.isCustom ?? false,
+          displayOrder: data.displayOrder || 0,
           calculatedMonthlyPrice: monthlyPrice,
           calculatedYearlyPrice: yearlyPrice,
           billingCycle: data.duration === 12 ? "yearly" : "monthly",
@@ -432,7 +440,9 @@ const Plans = () => {
                   isActive: true,
                 }
               : undefined,
-          badge: data.badge?.text ? data.badge : { text: null, variant: 'default' },
+          badge: data.badge?.text
+            ? data.badge
+            : { text: null, variant: "default" },
         });
       }
       setIsDialogOpen(false);
@@ -810,12 +820,17 @@ const Plans = () => {
                     <div className="flex-1">
                       <CardTitle className="text-xl flex items-center gap-2">
                         {plan.name}
-                        {plan.badge?.text && (
-                          <Badge variant={plan.badge.variant || "default"}>
-                            {plan.badge.text}
-                          </Badge>
-                        )}
                       </CardTitle>
+                      {plan.badge?.text && (
+                        <Badge variant={plan.badge.variant || "default"} className="mr-1">
+                          {plan.badge.text}
+                        </Badge>
+                      )}
+                      {plan.isCustom && (
+                        <Badge variant="secondary" className="mr-1">
+                          Custom Plan
+                        </Badge>
+                      )}
                       <CardDescription className="mt-2">
                         {plan.description}
                       </CardDescription>

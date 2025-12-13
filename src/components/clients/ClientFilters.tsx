@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/select";
 import { ClientStatus } from "@/types/client.types";
 
+export type ClientTier = "Basic" | "Pro" | "Enterprise" | "Custom";
+
 interface ClientFiltersProps {
   searchTerm: string;
   onSearchChange: (value: string) => void;
@@ -16,6 +18,8 @@ interface ClientFiltersProps {
   onSortChange: (value: "name" | "revenue" | "date") => void;
   status: ClientStatus | "all";
   onStatusChange: (value: ClientStatus | "all") => void;
+  tier?: ClientTier | "all";
+  onTierChange?: (value: ClientTier | "all") => void;
 }
 
 // Define the status options for filtering
@@ -35,6 +39,8 @@ export const ClientFilters = ({
   onSortChange,
   status,
   onStatusChange,
+  tier,
+  onTierChange,
 }: ClientFiltersProps) => {
   return (
     <div className="flex flex-col lg:flex-row gap-4">
@@ -72,13 +78,29 @@ export const ClientFilters = ({
         </Select>
 
         <Select
+          value={tier}
+          onValueChange={(value) => onTierChange(value as ClientTier | "all")}
+        >
+          <SelectTrigger className="w-full sm:w-48 glass-card bg-background/50">
+            <Filter className="w-4 h-4 mr-2" />
+            <SelectValue placeholder="Filter by Tier" />
+          </SelectTrigger>
+          <SelectContent className="glass-card">
+            <SelectItem value="all">All Tiers</SelectItem>
+            <SelectItem value="Basic">Basic</SelectItem>
+            <SelectItem value="Pro">Pro</SelectItem>
+            <SelectItem value="Enterprise">Enterprise</SelectItem>
+            <SelectItem value="Custom">Custom</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
           value={sortBy}
           onValueChange={(value) =>
             onSortChange(value as "name" | "revenue" | "date")
           }
         >
           <SelectTrigger className="w-full sm:w-48 glass-card bg-background/50">
-            <Filter className="w-4 h-4 mr-2" />
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent className="glass-card">

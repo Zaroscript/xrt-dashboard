@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools/production";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import {
   BrowserRouter,
   Routes,
@@ -133,7 +133,7 @@ function App() {
             <AppRoutes />
             <Toaster />
             <Sonner position="top-right" />
-            {/* <ReactQueryDevtools initialIsOpen={false} /> */}
+            {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
           </TooltipProvider>
         </ErrorBoundary>
       </BrowserRouter>

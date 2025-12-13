@@ -9,6 +9,7 @@ export interface Plan {
   features: string[];
   duration?: number;
   isActive: boolean;
+  displayOrder?: number;
   isFeatured?: boolean;
   yearlySavings?: number;
   discount?: {
@@ -52,7 +53,7 @@ export type PlanStatus = "active" | "inactive" | "all";
 export interface PlanFilter {
   status: PlanStatus;
   search: string;
-  sortBy: "name" | "price" | "createdAt";
+  sortBy: "name" | "price" | "createdAt" | "displayOrder";
   sortOrder: "asc" | "desc";
 }
 

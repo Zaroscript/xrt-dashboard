@@ -1,6 +1,6 @@
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -14,24 +14,31 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Loader2 } from 'lucide-react';
+import { Loader2 } from "lucide-react";
 
 export const planFormSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  description: z.string().min(10, 'Description must be at least 10 characters'),
-  price: z.coerce.number().min(0, 'Price must be a positive number'),
-  billingCycle: z.enum(['monthly', 'yearly']),
-  features: z.array(z.string()).min(1, 'At least one feature is required'),
-  maxRestaurants: z.coerce.number().min(1, 'At least one restaurant is required'),
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  description: z.string().min(10, "Description must be at least 10 characters"),
+  price: z.coerce.number().min(0, "Price must be a positive number"),
+  billingCycle: z.enum(["monthly", "yearly"]),
+  features: z.array(z.string()).min(1, "At least one feature is required"),
+  maxRestaurants: z.coerce
+    .number()
+    .min(1, "At least one restaurant is required"),
   isActive: z.boolean().default(true),
   isFeatured: z.boolean().default(false),
-  discount: z.object({
-    amount: z.coerce.number().min(0).max(100).optional(),
-    isActive: z.boolean().default(false),
-    code: z.string().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-  }).optional(),
+  discount: z
+    .object({
+      amount: z.coerce.number().min(0).max(100).optional(),
+      isActive: z.boolean().default(false),
+      code: z.string().optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    })
+    .optional(),
+  displayOrder: z.coerce.number().default(0),
+  isCustom: z.boolean().default(false),
+  newFeature: z.string().optional(),
 });
 
 type PlanFormValues = z.infer<typeof planFormSchema>;
@@ -47,15 +54,15 @@ export function PlanForm({
   defaultValues,
   onSubmit,
   isSubmitting,
-  submitButtonText = 'Create Plan',
+  submitButtonText = "Create Plan",
 }: PlanFormProps) {
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planFormSchema),
     defaultValues: {
-      name: '',
-      description: '',
+      name: "",
+      description: "",
       price: 0,
-      billingCycle: 'monthly',
+      billingCycle: "monthly",
       features: [],
       maxRestaurants: 1,
       isActive: true,
@@ -64,25 +71,29 @@ export function PlanForm({
         amount: 0,
         isActive: false,
       },
+      displayOrder: 0,
+
+      isCustom: false,
+      newFeature: "",
       ...defaultValues,
     },
   });
 
-  const features = form.watch('features') || [];
-  const hasDiscount = form.watch('discount.isActive');
+  const features = form.watch("features") || [];
+  const hasDiscount = form.watch("discount.isActive");
 
   const addFeature = () => {
-    const newFeature = form.getValues('newFeature');
+    const newFeature = form.getValues("newFeature");
     if (newFeature && !features.includes(newFeature)) {
-      form.setValue('features', [...features, newFeature]);
-      form.setValue('newFeature', '');
+      form.setValue("features", [...features, newFeature]);
+      form.setValue("newFeature", "");
     }
   };
 
   const removeFeature = (index: number) => {
     const newFeatures = [...features];
     newFeatures.splice(index, 1);
-    form.setValue('features', newFeatures);
+    form.setValue("features", newFeatures);
   };
 
   return (
@@ -145,6 +156,42 @@ export function PlanForm({
                   <Input type="number" min="1" {...field} />
                 </FormControl>
                 <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="displayOrder"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Display Order</FormLabel>
+                <FormControl>
+                  <Input type="number" {...field} />
+                </FormControl>
+                <FormDescription>Lower numbers appear first</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="isCustom"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-base">Custom Plan</FormLabel>
+                  <FormDescription>
+                    Hide price and show custom text
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
               </FormItem>
             )}
           />
@@ -217,9 +264,9 @@ export function PlanForm({
               <Input
                 placeholder="Add a feature"
                 className="w-64"
-                {...form.register('newFeature')}
+                {...form.register("newFeature")}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === "Enter") {
                     e.preventDefault();
                     addFeature();
                   }
@@ -229,7 +276,7 @@ export function PlanForm({
                 type="button"
                 variant="outline"
                 onClick={addFeature}
-                disabled={!form.watch('newFeature')}
+                disabled={!form.watch("newFeature")}
               >
                 Add
               </Button>
@@ -239,7 +286,10 @@ export function PlanForm({
           {features.length > 0 ? (
             <ul className="space-y-2">
               {features.map((feature, index) => (
-                <li key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                <li
+                  key={index}
+                  className="flex items-center justify-between p-2 bg-muted/50 rounded"
+                >
                   <span>{feature}</span>
                   <Button
                     type="button"
@@ -253,7 +303,14 @@ export function PlanForm({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted-foreground">No features added yet</p>
+            <p className="text-sm text-muted-foreground">
+              No features added yet
+            </p>
+          )}
+          {form.formState.errors.features && (
+            <p className="text-sm font-medium text-destructive mt-2">
+              {form.formState.errors.features.message}
+            </p>
           )}
         </div>
 

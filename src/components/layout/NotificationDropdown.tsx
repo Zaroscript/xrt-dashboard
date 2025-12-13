@@ -1,5 +1,4 @@
-import { useAppSelector, useAppDispatch } from "@/store/store";
-import { markAsRead, markAllAsRead } from "@/store/slices/notificationsSlice";
+import { useNotificationsStore } from "@/stores/notifications/useNotificationsStore";
 import { Bell, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,16 +12,15 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 export function NotificationDropdown() {
-  const dispatch = useAppDispatch();
-  const { notifications } = useAppSelector((state) => state.notifications);
+  const { notifications, markAsRead, markAllAsRead } = useNotificationsStore();
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const handleMarkAsRead = (id: string) => {
-    dispatch(markAsRead(id));
+    markAsRead(id);
   };
 
   const handleMarkAllAsRead = () => {
-    dispatch(markAllAsRead());
+    markAllAsRead();
   };
 
   return (
@@ -60,7 +58,9 @@ export function NotificationDropdown() {
             notifications.map((notification) => (
               <DropdownMenuItem
                 key={notification.id}
-                className={`flex flex-col items-start p-2 ${!notification.read ? "bg-primary/10" : ""}`}
+                className={`flex flex-col items-start p-2 ${
+                  !notification.read ? "bg-primary/10" : ""
+                }`}
                 onClick={() => handleMarkAsRead(notification.id)}
               >
                 <p className="font-semibold">{notification.title}</p>

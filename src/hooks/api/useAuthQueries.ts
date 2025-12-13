@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { authService } from '@/services/api/authService';
-import { useAuthStore } from '@/stores/auth/useAuthStore';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { authService } from "@/services/api/authService";
+import { useAuthStore } from "@/stores/auth/useAuthStore";
 
 export const useLogin = () => {
   const queryClient = useQueryClient();
@@ -9,8 +9,11 @@ export const useLogin = () => {
   return useMutation({
     mutationFn: authService.login,
     onSuccess: (data) => {
-      setAuth(data.data.user, data.data.tokens);
-      queryClient.invalidateQueries({ queryKey: ['me'] });
+      setAuth(data.data.user, {
+        accessToken: data.data.accessToken,
+        refreshToken: data.data.refreshToken,
+      });
+      queryClient.invalidateQueries({ queryKey: ["me"] });
     },
   });
 };
@@ -22,8 +25,11 @@ export const useRegister = () => {
   return useMutation({
     mutationFn: authService.login, // Using login for now since register doesn't exist
     onSuccess: (data: any) => {
-      setAuth(data.data.user, data.data.tokens);
-      queryClient.invalidateQueries({ queryKey: ['me'] });
+      setAuth(data.data.user, {
+        accessToken: data.data.accessToken,
+        refreshToken: data.data.refreshToken,
+      });
+      queryClient.invalidateQueries({ queryKey: ["me"] });
     },
   });
 };
@@ -46,14 +52,14 @@ export const useGetMe = () => {
   const queryClient = useQueryClient();
 
   return useQuery({
-    queryKey: ['me'],
+    queryKey: ["me"],
     queryFn: async () => {
       if (!tokens?.accessToken) {
-        throw new Error('No access token');
+        throw new Error("No access token");
       }
       const data = await authService.getMe();
       if (data) {
-        setAuth(data.user, data.tokens);
+        setAuth(data.user, tokens || { accessToken: "" });
       }
       return data;
     },
@@ -69,7 +75,7 @@ export const useRefreshToken = () => {
   return useMutation({
     mutationFn: () => {
       if (!tokens?.refreshToken) {
-        throw new Error('No refresh token');
+        throw new Error("No refresh token");
       }
       return authService.refreshToken(tokens.refreshToken);
     },

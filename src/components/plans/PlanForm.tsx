@@ -36,6 +36,7 @@ const planFormSchema = z.object({
     .array(z.string().min(1, { message: "Feature cannot be empty." }))
     .min(1, { message: "At least one feature is required." }),
   isActive: z.boolean().default(true),
+  displayOrder: z.coerce.number().default(0),
   isCustom: z.boolean().default(false),
   discount: z
     .object({
@@ -85,9 +86,11 @@ export const PlanForm = ({
   isLoading = false,
   isSubmitting = false,
 }: PlanFormProps) => {
-  const [features, setFeatures] = useState<string[]>(plan?.features || [""]);
+  const [features, setFeatures] = useState<string[]>(plan?.features || []);
   const [featureInput, setFeatureInput] = useState("");
-  const [showBadgeFields, setShowBadgeFields] = useState(!!plan?.badge);
+  const [showBadgeFields, setShowBadgeFields] = useState(
+    !!(plan?.badge && plan.badge.text)
+  );
   const [useCustomPrices, setUseCustomPrices] = useState(
     !!(plan?.monthlyPrice || plan?.yearlyPrice)
   );
@@ -101,7 +104,8 @@ export const PlanForm = ({
     monthlyPrice: plan?.monthlyPrice || null,
     yearlyPrice: plan?.yearlyPrice || null,
     duration: (plan?.duration || 1) as 1 | 12,
-    features: plan?.features || [""],
+    features: plan?.features || [],
+    displayOrder: plan?.displayOrder || 0,
     isActive: plan?.isActive ?? true,
     isCustom: plan?.isCustom || false,
     discount: plan?.discount
@@ -116,7 +120,7 @@ export const PlanForm = ({
             : undefined,
         }
       : undefined,
-    badge: plan?.badge || undefined,
+    badge: plan?.badge && plan.badge.text ? plan.badge : undefined,
   };
 
   const {
@@ -135,8 +139,8 @@ export const PlanForm = ({
   useEffect(() => {
     if (plan) {
       reset(defaultValues);
-      setFeatures(plan.features || [""]);
-      setShowBadgeFields(!!plan.badge);
+      setFeatures(plan.features || []);
+      setShowBadgeFields(!!(plan.badge && plan.badge.text));
     }
   }, [plan, reset]);
 
@@ -438,6 +442,27 @@ export const PlanForm = ({
                 Disabled plans won't be shown to users.
               </p>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="displayOrder">Display Order</Label>
+              <div className="space-y-1">
+                <Input
+                  id="displayOrder"
+                  type="number"
+                  placeholder="0"
+                  {...register("displayOrder")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Controls the sorting order of plans (lower numbers appear
+                  first).
+                </p>
+                {errors.displayOrder?.message && (
+                  <p className="text-sm font-medium text-destructive">
+                    {errors.displayOrder.message}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -683,7 +708,17 @@ export const PlanForm = ({
                   <Label htmlFor="badge-variant">Badge Style</Label>
                   <Select
                     onValueChange={(
-                      value: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "info" | "premium" | "new" | "limited"
+                      value:
+                        | "default"
+                        | "secondary"
+                        | "destructive"
+                        | "outline"
+                        | "success"
+                        | "warning"
+                        | "info"
+                        | "premium"
+                        | "new"
+                        | "limited"
                     ) => setValue("badge.variant", value)}
                     defaultValue={watch("badge.variant") || "default"}
                   >
