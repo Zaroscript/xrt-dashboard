@@ -2,7 +2,7 @@
  * Handy utilities for working with avatar images and user initials
  */
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 /**
  * Get the full avatar URL from a relative path or full URL
