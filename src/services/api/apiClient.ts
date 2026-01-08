@@ -31,7 +31,7 @@ const processQueue = (error: any, token: string | null = null) => {
 // Base URL configuration - using relative URL to work with Vite proxy
 // Base URL configuration
 const API_URL = import.meta.env.VITE_API_URL;
-const baseURL = import.meta.env.DEV ? `${API_URL}/api/v1` : `${API_URL}/api`;
+const baseURL = `${API_URL}/api/v1`;
 
 // Extend InternalAxiosRequestConfig to include _retry flag
 interface RetryConfig extends InternalAxiosRequestConfig {
